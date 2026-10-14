@@ -14,7 +14,7 @@ export class Synth {
     const comp = this.ctx.createDynamicsCompressor();
     comp.connect(this.ctx.destination);
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.55;
+    this.master.gain.value = 0.8;
     this.master.connect(comp);
 
     // Eco corto para dar un poco de espacio.
@@ -97,4 +97,31 @@ export function getSynth() {
   shared ??= new Synth();
   shared.resume();
   return shared;
+}
+
+/** Estado del audio: 'running' si suena; otro valor si el navegador lo tiene bloqueado. */
+export function audioState(): AudioContextState | 'none' {
+  return shared?.ctx.state ?? 'none';
+}
+
+/**
+ * Los navegadores solo dejan arrancar el audio dentro de un gesto del usuario
+ * (click, toque o tecla); Safari además exige que el AudioContext se cree ahí.
+ * Este listener crea/reactiva el audio en cada gesto, así nunca queda trabado.
+ */
+export function installAudioUnlock() {
+  let primed = false;
+  const unlock = () => {
+    const synth = getSynth();
+    if (synth.ctx.state !== 'running') void synth.ctx.resume();
+    if (!primed) {
+      // Un buffer silencioso termina de destrabar el audio en iOS/Safari.
+      const src = synth.ctx.createBufferSource();
+      src.buffer = synth.ctx.createBuffer(1, 1, synth.ctx.sampleRate);
+      src.connect(synth.ctx.destination);
+      src.start(0);
+      primed = true;
+    }
+  };
+  for (const type of ['pointerdown', 'keydown', 'touchend']) window.addEventListener(type, unlock, { capture: true });
 }

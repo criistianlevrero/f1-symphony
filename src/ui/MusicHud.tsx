@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Game } from '../game/Game';
+import { audioState } from '../music/audio';
 import type { MusicRun } from '../music/MusicRun';
 import { JUDGEMENTS, type RunResult } from '../music/scoring';
 import { formatTime } from './Hud';
@@ -63,6 +64,7 @@ export function MusicHud({ game, music, onExit }: { game: Game; music: MusicRun;
   const judgeRef = useRef<HTMLDivElement>(null);
   const scoreRef = useRef<HTMLDivElement>(null);
   const speedRef = useRef<HTMLDivElement>(null);
+  const audioRef = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<RunResult | null>(null);
 
   useEffect(() => {
@@ -91,6 +93,7 @@ export function MusicHud({ game, music, onExit }: { game: Game; music: MusicRun;
         speedRef.current.textContent = `Sugerida ${Math.round(target)} km/h`;
         speedRef.current.dataset.state = Math.abs(diff) < 0.05 ? 'ok' : diff < 0 ? 'low' : 'high';
       }
+      if (audioRef.current) audioRef.current.style.display = audioState() === 'running' ? 'none' : '';
       const last = hud.last;
       if (judgeRef.current && last && last.at !== lastJudgeAt) {
         lastJudgeAt = last.at;
@@ -119,6 +122,9 @@ export function MusicHud({ game, music, onExit }: { game: Game; music: MusicRun;
       <div ref={speedRef} className="hud-suggested" />
       <div ref={scoreRef} className="hud-score" />
       <div ref={judgeRef} className="hud-judgement" />
+      <div ref={audioRef} className="hud-audio" style={{ display: 'none' }}>
+        🔇 El navegador tiene el sonido bloqueado: hacé click en la pantalla o tocá una tecla
+      </div>
       {result && <Results result={result} time={game.telemetry.raceTime} bpm={music.hud.bpm} onExit={onExit} />}
     </>
   );
