@@ -1,5 +1,5 @@
 import { appendPiece } from './build';
-import type { PieceType, PlacedPiece, TrackData } from './types';
+import type { PieceType, PlacedPiece, SongNote, TrackData } from './types';
 
 function sequence(steps: (PieceType | { gap: number; type: PieceType })[]): PlacedPiece[] {
   const pieces: PlacedPiece[] = [];
@@ -10,12 +10,29 @@ function sequence(steps: (PieceType | { gap: number; type: PieceType })[]): Plac
   return pieces;
 }
 
+const C = 72;
+const D = 74;
+const E = 76;
+const F = 77;
+const G = 79;
+
+/** «Oda a la alegría» (Beethoven), dos frases. [nota, beat, duración] */
+function odeToJoy(): SongNote[] {
+  const phrase = (start: number, ending: [number, number]): [number, number, number][] => [
+    [E, 0, 1], [E, 1, 1], [F, 2, 1], [G, 3, 1],
+    [G, 4, 1], [F, 5, 1], [E, 6, 1], [D, 7, 1],
+    [C, 8, 1], [C, 9, 1], [D, 10, 1], [E, 11, 1],
+    [ending[0], 12, 1.5], [ending[1], 13.5, 0.5], [ending[1], 14, 2],
+  ].map(([p, b, d]) => [p, b + start, d] as [number, number, number]);
+  return [...phrase(0, [E, D]), ...phrase(16, [D, C])].map(([pitch, beat, duration]) => ({ pitch, beat, duration }));
+}
+
 /** Pista de ejemplo que viene con el juego. */
 export function demoTrack(): TrackData {
   return {
     version: 1,
     id: 'demo',
-    name: 'Demo: primer circuito',
+    name: 'Demo: Oda a la alegría',
     updatedAt: 0,
     pieces: sequence([
       'start',
@@ -42,6 +59,6 @@ export function demoTrack(): TrackData {
       'straight',
       'finish',
     ]),
-    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 24, notes: [] },
+    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: odeToJoy() },
   };
 }

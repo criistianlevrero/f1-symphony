@@ -10,6 +10,7 @@ import { carTuning } from './tuning';
 import { buildTrack, type BuiltTrack } from '../track/build';
 import type { TrackData } from '../track/types';
 import { ROAD_HALF_WIDTH } from '../track/pieces';
+import { MusicRun } from '../music/MusicRun';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -60,6 +61,8 @@ export class Game {
   private car!: Car;
   private carView!: CarView;
   private track!: BuiltTrack;
+  /** Marcadores, sonido y puntaje; null si la pista no tiene melodía. */
+  music: MusicRun | null = null;
 
   private raf = 0;
   private lastTime = 0;
@@ -120,6 +123,11 @@ export class Game {
     addTrackColliders(RAPIER, this.world, this.track.geometries);
     this.telemetry.trackLength = this.track.path?.length ?? 0;
 
+    if (trackData.song.notes.length > 0 && this.track.path) {
+      this.music = new MusicRun(trackData.song, this.track.path);
+      this.scene.add(this.music.view.group);
+    }
+
     const { position: p, quaternion: q } = this.track.spawn;
     this.car = new Car(
       RAPIER,
@@ -143,6 +151,7 @@ export class Game {
     Object.assign(this.telemetry, { state: 'ready', raceTime: 0, progress: 0 });
     this.pathHint = -1;
     this.finishSide = -1;
+    this.music?.reset();
     this.capturePose();
     this.capturePose();
     this.chase.snap();
@@ -183,6 +192,7 @@ export class Game {
     if (t.state === 'running') {
       t.raceTime += FIXED_DT;
       this.updateProgress();
+      this.music?.step(t.raceTime, this.currPos, t.progress, this.car.speed);
       this.checkFinish();
     }
   }
@@ -229,6 +239,7 @@ export class Game {
     this.renderPos.lerpVectors(this.prevPos, this.currPos, alpha);
     this.renderRot.slerpQuaternions(this.prevRot, this.currRot, alpha);
     this.carView.sync(this.renderPos, this.renderRot);
+    this.music?.view.update(frameDt);
 
     const speed = this.car.speed;
     this.chase.update(this.renderPos, this.renderRot, speed, this.car.tuning.topSpeed, frameDt);
@@ -264,6 +275,7 @@ export class Game {
     this.resizeObserver.disconnect();
     this.keyboard.dispose();
     this.car.dispose();
+    this.music?.dispose();
     this.world.free();
     this.track.geometries.forEach((g) => g.dispose());
     this.renderer.dispose();

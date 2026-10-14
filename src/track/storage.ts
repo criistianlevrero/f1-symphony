@@ -72,7 +72,7 @@ export function newTrack(name = 'Pista nueva'): TrackData {
     name,
     updatedAt: Date.now(),
     pieces: [{ type: 'start', cell: [0, 0, 0], rot: 0 }],
-    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 24, notes: [] },
+    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: [] },
   };
 }
 

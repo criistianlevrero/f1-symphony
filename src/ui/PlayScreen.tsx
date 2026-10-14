@@ -34,15 +34,16 @@ export function PlayScreen({ track, onExit, exitLabel }: { track: TrackData; onE
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.code === 'Escape') onExit();
+      if (e.code === 'KeyM' && game?.music) game.music.metronome = !game.music.metronome;
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [onExit]);
+  }, [onExit, game]);
 
   return (
     <div className="screen">
       <div ref={containerRef} className="viewport" />
-      {game && <Hud game={game} />}
+      {game && <Hud game={game} onExit={onExit} />}
       {!game && !error && <div className="overlay">Cargando…</div>}
       {error && <div className="overlay error">{error}</div>}
       <button className="btn back-btn" onClick={onExit}>

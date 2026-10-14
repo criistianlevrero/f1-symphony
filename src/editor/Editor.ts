@@ -4,7 +4,10 @@ import { createEnvironment } from '../game/environment';
 import { buildGate, buildPieceGeometry } from '../track/geometry';
 import { chainPieces, exitConnector, headingDir, pieceFrames } from '../track/layout';
 import { CELL, LEVEL } from '../track/pieces';
-import type { Heading, PieceType, PlacedPiece } from '../track/types';
+import type { Heading, PieceType, PlacedPiece, Song } from '../track/types';
+import { TrackPath } from '../track/TrackPath';
+import { MarkerView } from '../music/MarkerView';
+import { computeMarkers } from '../music/song';
 
 const MAX_LEVEL = 12;
 const MAX_HISTORY = 200;
@@ -17,6 +20,8 @@ export interface EditorCursor {
 export interface EditorEvents {
   onChange?: (pieces: PlacedPiece[]) => void;
   onCursor?: (cursor: EditorCursor) => void;
+  /** Largo del recorrido (m) cada vez que cambia la pista. */
+  onPathLength?: (length: number) => void;
 }
 
 const sameCell = (a: [number, number, number], b: [number, number, number]) =>
@@ -46,6 +51,9 @@ export class Editor {
   private cursor: EditorCursor = { cell: [0, 0, 0], rot: 0 };
   private type: PieceType = 'straight';
   private hovered = -1;
+  private song: Song | null = null;
+  private path: TrackPath | null = null;
+  private markerView: MarkerView | null = null;
 
   private trackGroup = new THREE.Group();
   private pieceMeshes: THREE.Mesh[] = [];
@@ -54,6 +62,7 @@ export class Editor {
   private grid: THREE.GridHelper;
   /** Capa libre para que otras vistas (p. ej. marcadores) dibujen sobre la pista. */
   readonly overlay = new THREE.Group();
+  private _inputEnabled = true;
 
   private roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
   private detachedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true, transparent: true, opacity: 0.45 });
@@ -124,6 +133,24 @@ export class Editor {
 
   getPieces() {
     return structuredClone(this.pieces);
+  }
+
+  /** Si es false, el editor no coloca ni borra tramos (la cámara sigue andando). */
+  get inputEnabled() {
+    return this._inputEnabled;
+  }
+
+  set inputEnabled(on: boolean) {
+    this._inputEnabled = on;
+    this.ghost.visible = on;
+    this.cursorMarker.visible = on;
+    if (!on) this.setHovered(-1);
+  }
+
+  /** Muestra los marcadores de la melodía sobre la pista. */
+  setSong(song: Song) {
+    this.song = song;
+    this.updateMarkers();
   }
 
   setPieceType(type: PieceType) {
@@ -204,6 +231,7 @@ export class Editor {
     window.removeEventListener('keydown', this.onKeyDown);
     this.controls.dispose();
     this.disposeTrackMeshes();
+    this.markerView?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -259,7 +287,12 @@ export class Editor {
 
   private rebuild() {
     this.disposeTrackMeshes();
-    const inRoute = new Set(chainPieces(this.pieces).order);
+    const { order } = chainPieces(this.pieces);
+    const inRoute = new Set(order);
+    const frames = order.flatMap((i) => pieceFrames(this.pieces[i]));
+    this.path = frames.length > 1 ? new TrackPath(frames) : null;
+    this.events.onPathLength?.(this.path?.length ?? 0);
+    this.updateMarkers();
     this.pieces.forEach((piece, i) => {
       const mesh = new THREE.Mesh(buildPieceGeometry(piece), inRoute.has(i) ? this.roadMat : this.detachedMat);
       mesh.userData.index = i;
@@ -270,6 +303,17 @@ export class Editor {
     });
     this.hovered = -1;
     this.updateGhost();
+  }
+
+  private updateMarkers() {
+    if (this.markerView) {
+      this.overlay.remove(this.markerView.group);
+      this.markerView.dispose();
+      this.markerView = null;
+    }
+    if (!this.song || !this.path) return;
+    this.markerView = new MarkerView(computeMarkers(this.song, this.path).markers);
+    this.overlay.add(this.markerView.group);
   }
 
   private updateGhost() {
@@ -304,7 +348,7 @@ export class Editor {
   }
 
   private onPointerMove = (e: PointerEvent) => {
-    if (e.buttons & 6) return; // rotando o paneando la cámara
+    if (e.buttons & 6 || !this.inputEnabled) return; // rotando o paneando la cámara
     this.updatePointer(e);
     const hit = this.raycaster.intersectObjects(this.pieceMeshes, false)[0];
     this.setHovered(hit ? (hit.object.userData.index as number) : -1);
@@ -325,7 +369,7 @@ export class Editor {
 
   private onPointerUp = (e: PointerEvent) => {
     const moved = Math.hypot(e.clientX - this.downAt.x, e.clientY - this.downAt.y) > 5;
-    if (moved || e.button !== this.downAt.button) return;
+    if (moved || e.button !== this.downAt.button || !this.inputEnabled) return;
     if (e.button === 0) {
       if (e.shiftKey || e.altKey) this.remove();
       else this.place();
@@ -333,7 +377,7 @@ export class Editor {
   };
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (isTyping(e)) return;
+    if (isTyping(e) || !this.inputEnabled) return;
     const mod = e.ctrlKey || e.metaKey;
     const k = e.code;
     let handled = true;
@@ -368,6 +412,7 @@ export class Editor {
     if (this.disposed) return;
     this.raf = requestAnimationFrame(this.loop);
     this.controls.update();
+    this.markerView?.update(1 / 60);
     this.renderer.render(this.scene, this.camera);
   };
 

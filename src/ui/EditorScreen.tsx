@@ -2,8 +2,33 @@ import { useEffect, useRef, useState } from 'react';
 import { Editor, type EditorCursor } from '../editor/Editor';
 import { PIECE_ORDER, PIECES } from '../track/pieces';
 import { exportTrackFile, saveTrack } from '../track/storage';
-import type { PieceType, TrackData } from '../track/types';
+import type { PieceType, Song, TrackData } from '../track/types';
+import { availableBeats, songLengthBeats } from '../music/song';
+import { PianoRoll } from './PianoRoll';
 import { PieceIcon } from './PieceIcon';
+
+/** Campo numérico que confirma el valor al salir del campo o con Enter (sin pelear con el tipeo). */
+function NumberField({ value, min, max, onCommit }: { value: number; min: number; max: number; onCommit: (v: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const v = Number(text);
+    const clamped = Number.isFinite(v) && text.trim() !== '' ? Math.max(min, Math.min(max, v)) : value;
+    setText(String(clamped));
+    if (clamped !== value) onCommit(clamped);
+  };
+  return (
+    <input
+      type="number"
+      min={min}
+      max={max}
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+    />
+  );
+}
 
 const ROT_LABEL = ['→ Este', '↓ Sur', '← Oeste', '↑ Norte'];
 
@@ -23,12 +48,17 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   const [type, setType] = useState<PieceType>('straight');
   const [cursor, setCursor] = useState<EditorCursor | null>(null);
   const [message, setMessage] = useState('');
+  const [tab, setTab] = useState<'track' | 'music'>('track');
+  const [pathLength, setPathLength] = useState(0);
+  const [noteLength, setNoteLength] = useState(1);
 
   useEffect(() => {
     const editor = new Editor(containerRef.current!, trackRef.current.pieces, {
       onChange: (pieces) => onChange({ ...trackRef.current, pieces }, true),
       onCursor: setCursor,
+      onPathLength: setPathLength,
     });
+    editor.setSong(trackRef.current.song);
     editorRef.current = editor;
     return () => {
       editor.dispose();
@@ -39,6 +69,16 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   }, []);
 
   useEffect(() => editorRef.current?.setPieceType(type), [type]);
+  useEffect(() => editorRef.current?.setSong(track.song), [track.song]);
+  useEffect(() => {
+    if (editorRef.current) editorRef.current.inputEnabled = tab === 'track';
+  }, [tab]);
+
+  const setSong = (patch: Partial<Song>) => onChange({ ...track, song: { ...track.song, ...patch } }, true);
+  const song = track.song;
+  const beatsFit = availableBeats(song, pathLength);
+  const songBeats = songLengthBeats(song);
+  const outside = song.notes.filter((n) => n.beat > beatsFit).length;
 
   useEffect(() => {
     if (!message) return;
@@ -84,27 +124,86 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
         {message && <div className="toast">{message}</div>}
         {!hasFinish && <div className="hint">Falta la llegada: agregá un tramo «Llegada» al final del recorrido.</div>}
 
-        <h3>Tramos</h3>
-        <div className="palette">
-          {PIECE_ORDER.map((t) => (
-            <button key={t} className={`piece ${t === type ? 'selected' : ''}`} onClick={() => setType(t)} title={PIECES[t].label}>
-              <PieceIcon type={t} />
-              <span>{PIECES[t].label}</span>
-            </button>
-          ))}
+        <div className="tabs">
+          <button className={tab === 'track' ? 'active' : ''} onClick={() => setTab('track')}>
+            Pista
+          </button>
+          <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>
+            Música ({song.notes.length})
+          </button>
         </div>
 
-        <div className="panel-row">
-          <button className="btn ghost" onClick={() => editorRef.current?.undo()}>
-            Deshacer
-          </button>
-          <button className="btn ghost" onClick={() => editorRef.current?.redo()}>
-            Rehacer
-          </button>
-          <button className="btn ghost" onClick={() => confirm('¿Borrar todos los tramos?') && editorRef.current?.clear()}>
-            Vaciar
-          </button>
-        </div>
+        {tab === 'track' ? (
+          <>
+            <h3>Tramos</h3>
+            <div className="palette">
+              {PIECE_ORDER.map((t) => (
+                <button key={t} className={`piece ${t === type ? 'selected' : ''}`} onClick={() => setType(t)} title={PIECES[t].label}>
+                  <PieceIcon type={t} />
+                  <span>{PIECES[t].label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="panel-row">
+              <button className="btn ghost" onClick={() => editorRef.current?.undo()}>
+                Deshacer
+              </button>
+              <button className="btn ghost" onClick={() => editorRef.current?.redo()}>
+                Rehacer
+              </button>
+              <button className="btn ghost" onClick={() => confirm('¿Borrar todos los tramos?') && editorRef.current?.clear()}>
+                Vaciar
+              </button>
+            </div>
+
+          </>
+        ) : (
+          <>
+            <label className="field">
+              Tempo (BPM)
+              <NumberField value={song.bpm} min={40} max={240} onCommit={(bpm) => setSong({ bpm })} />
+            </label>
+            <label className="field">
+              Compás
+              <select value={song.beatsPerBar} onChange={(e) => setSong({ beatsPerBar: +e.target.value })}>
+                {[2, 3, 4, 5, 6, 7].map((b) => (
+                  <option key={b} value={b}>
+                    {b}/4
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Velocidad de diseño (km/h)
+              <NumberField value={Math.round(song.designSpeed * 3.6)} min={30} max={260} onCommit={(v) => setSong({ designSpeed: v / 3.6 })} />
+              <small>La velocidad a la que la melodía suena al tempo original.</small>
+            </label>
+            <label className="field">
+              Inicio de la melodía (m)
+              <NumberField value={Math.round(song.startOffset)} min={0} max={400} onCommit={(startOffset) => setSong({ startOffset })} />
+              <small>Distancia desde la largada hasta el primer beat, para tomar velocidad.</small>
+            </label>
+            <label className="field">
+              Duración de nota nueva
+              <select value={noteLength} onChange={(e) => setNoteLength(+e.target.value)}>
+                <option value={0.25}>Semicorchea</option>
+                <option value={0.5}>Corchea</option>
+                <option value={1}>Negra</option>
+                <option value={2}>Blanca</option>
+                <option value={4}>Redonda</option>
+              </select>
+            </label>
+            <div className="info">
+              En la pista entran <b>{Math.floor(beatsFit)}</b> beats ({(beatsFit / song.beatsPerBar).toFixed(1)} compases). La melodía dura{' '}
+              <b>{songBeats}</b> beats.
+              {outside > 0 && <div className="hint">{outside} nota(s) quedan fuera de la pista: alargala, subí la velocidad o bajá el tempo.</div>}
+            </div>
+            <button className="btn ghost danger" disabled={!song.notes.length} onClick={() => confirm('¿Borrar toda la melodía?') && setSong({ notes: [] })}>
+              Borrar melodía
+            </button>
+          </>
+        )}
 
         {cursor && (
           <div className="cursor-info">
@@ -132,6 +231,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
           <dd>deshacer / rehacer</dd>
         </dl>
       </aside>
+      {tab === 'music' && <PianoRoll song={song} onChange={(notes) => setSong({ notes })} availableBeats={beatsFit} noteLength={noteLength} />}
     </div>
   );
 }

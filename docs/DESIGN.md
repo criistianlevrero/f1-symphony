@@ -86,29 +86,43 @@ s = s_largada + velocidadDeDiseño × tiempoDeLaNota
 tiempoDeLaNota = beat × 60 / bpm
 ```
 
-Después el autor puede correr marcadores a mano, aunque eso cambia el ritmo a esa
-velocidad. El editor avisa si la melodía no entra en la pista o si dos marcadores
-quedan demasiado cerca.
+Las notas que empiezan en el mismo beat forman un acorde y comparten marcador. El
+editor muestra los marcadores sobre la pista en vivo y avisa cuántas notas no entran.
+Pendiente: mover marcadores a mano.
 
 Los marcadores son **sensores**: se atraviesan sin frenar el auto, suenan al
 contacto y cambian de aspecto. Cada marcador se activa una sola vez por intento.
 
 ## Puntaje
 
-Sea `tᵢ` el tiempo en que el jugador tocó la nota i, y `Tᵢ` el tiempo ideal según la
-partitura.
+Implementado en `src/music/scoring.ts` (con tests). Sea `tᵢ` el tiempo en que el
+jugador tocó la nota i, y `Tᵢ` el tiempo ideal según la partitura.
 
-1. **Ritmo relativo (principal):** se estima el tempo del jugador con la regresión
-   lineal `tᵢ ≈ a + k·Tᵢ` (k es el factor de tempo: k > 1 es más lento). El error
-   rítmico de cada nota es `|tᵢ − (a + k·Tᵢ)|`, medido en beats del tempo del
-   jugador. Cada nota da puntos según ventanas (por ejemplo Perfecto / Bien / Ok / Mal),
-   así que ir más rápido o más lento no penaliza mientras se mantenga el ritmo.
-2. **Bonus por tempo:** multiplicador según qué tan cerca está k de 1
-   (por ejemplo ±3% da el bonus máximo, y decae hasta ±20%).
-3. **Notas perdidas:** un marcador sin tocar cuenta como fallo y rompe el combo.
+1. **Ritmo relativo (principal):** el tempo del jugador se estima con la regresión
+   lineal `t ≈ a + k·T` sobre las **últimas 6 notas tocadas** (k es el factor de
+   tempo: k > 1 es más lento). Así se tolera que el tempo vaya cambiando de a poco.
+   Cada nota nueva se compara con lo que predice ese ajuste, y el error se mide en
+   beats del tempo del jugador:
 
-El cálculo es incremental: el feedback por nota (Perfecto / Bien…) se muestra en vivo
-usando la estimación de tempo de las notas tocadas hasta el momento.
+   | Juicio | Error | Puntos |
+   |---|---|---|
+   | ¡Perfecto! | ≤ 0,08 beat | 100 |
+   | Muy bien | ≤ 0,16 beat | 70 |
+   | Bien | ≤ 0,30 beat | 40 |
+   | Fuera de tiempo | más | 10 (corta el combo) |
+   | Perdida | marcador sin tocar | 0 (corta el combo) |
+
+   Las dos primeras notas definen el tempo, así que no se juzgan.
+2. **Bonus por tempo:** al final se ajusta k sobre todas las notas. Si se desvía menos
+   de 3% del tempo original, el bonus es de +25%; baja linealmente hasta 0 con un
+   20% de desvío.
+3. **Nota final:** S ≥ 95%, A ≥ 85%, B ≥ 70% y C ≥ 50% de precisión rítmica.
+
+### Detección de toques
+
+Cada marcador tiene una zona cilíndrica alineada con la pista: 3,4 m de radio en el
+plano de la calzada, y de 3 m abajo a 9 m arriba (generoso, para tocar notas en
+pleno salto). Los acordes ensanchan la zona lateralmente.
 
 ## Metrónomo (HUD)
 
@@ -123,13 +137,15 @@ izquierda a derecha:
   resto son cortos (en 4/4: uno largo y tres cortos).
 - Opcional: click de metrónomo audible en la barra de arriba.
 
-Se dibuja en un `<canvas>` 2D aparte, para no tocar el DOM en cada frame.
+Se dibuja en un `<canvas>` 2D aparte, para no tocar el DOM en cada frame. Arriba
+del velocímetro se muestra la velocidad sugerida (en verde si vas dentro del ±5%).
+El click del metrónomo se activa y desactiva con la tecla M.
 
 ## Fases
 
-1. **Manejo** ✅ base: auto, cámara de persecución, escenario de prueba y panel de ajuste.
-2. **Tramos:** catálogo, curva central y armado de pista desde JSON.
-3. **Editor de pista:** colocar y rotar tramos en la grilla, y guardar y cargar desde `localStorage`.
-4. **Música:** piano roll, colocación de marcadores, sonido, metrónomo y puntaje.
-5. **Interfaz:** menú, lista de pistas, resultados y mejor puntaje por pista.
+1. **Manejo** ✅ auto, cámara de persecución y panel de ajuste.
+2. **Tramos** ✅ catálogo de 14 tramos, curva central y armado de pista desde JSON.
+3. **Editor de pista** ✅ colocar y rotar tramos en la grilla, guardar y cargar desde `localStorage`, exportar e importar.
+4. **Música** ✅ piano roll, colocación de marcadores, sonido, metrónomo y puntaje.
+5. **Interfaz:** ✅ menú, lista de pistas y resultados. Falta guardar el mejor puntaje por pista.
 6. Después: mobile (controles táctiles), MIDI y fantasma de la mejor vuelta.

@@ -10,6 +10,7 @@ con precisión rítmica.
 npm install
 npm run dev        # http://localhost:5173
 npm run build      # typecheck + build de producción
+npm test           # tests (puntaje)
 ```
 
 ## Controles
@@ -21,7 +22,19 @@ npm run build      # typecheck + build de producción
 | A D / ← → | Girar (en el aire: rotar) |
 | Espacio | Freno de mano / derrape |
 | R | Volver al punto de partida |
+| M | Activar o desactivar el metrónomo |
 | T | Panel de ajuste del manejo |
+| Esc | Volver al menú o al editor |
+
+## Editor
+
+Pestaña **Pista**: elegí un tramo y hacé click en la grilla para colocarlo (el
+cursor salta a la salida del tramo, así se puede seguir encadenando con Enter).
+Q/E rotan, R/F suben y bajan de nivel, Shift+click o X borran, y Ctrl+Z deshace.
+El botón derecho rota la cámara (con Shift la desplaza).
+
+Pestaña **Música**: tempo, compás, velocidad de diseño y piano roll. Los
+marcadores se ubican solos sobre la pista según la melodía.
 
 ## Documentación
 
