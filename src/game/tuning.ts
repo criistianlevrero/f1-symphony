@@ -1,14 +1,10 @@
 // Parámetros del manejo. Todo en unidades SI (metros, segundos, kg).
 // Convención del chasis: +X adelante, +Y arriba, +Z derecha.
+// Las medidas del auto (ruedas, collider) salen del modelo: ver CarView.loadCarModel.
 export const carTuning = {
   mass: 900,
-  chassisHalfExtents: { x: 2.0, y: 0.22, z: 0.85 },
-  centerOfMassY: -0.35,
+  centerOfMassY: 0.05, // altura sobre el eje de las ruedas
 
-  wheelRadius: 0.36,
-  wheelBaseX: 1.45, // distancia del centro a cada eje
-  wheelTrackZ: 0.9, // distancia del centro a cada rueda, lateral
-  wheelMountY: -0.1,
   suspensionRestLength: 0.3,
   suspensionStiffness: 60,
   suspensionCompression: 6,

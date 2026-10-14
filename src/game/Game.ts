@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import RAPIER from '@dimforge/rapier3d-compat';
 import { Car } from './Car';
-import { CarView } from './CarView';
+import { CarView, loadCarModel, type CarModel } from './CarView';
 import { ChaseCamera } from './ChaseCamera';
 import { Keyboard } from './input';
 import { buildSandbox } from './sandbox';
@@ -9,6 +9,7 @@ import { carTuning } from './tuning';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
+const CAR_MODEL_URL = `${import.meta.env.BASE_URL}models/car.glb`;
 
 export interface Telemetry {
   speedKmh: number;
@@ -69,9 +70,9 @@ export class Game {
   }
 
   static async create(container: HTMLElement) {
-    await initRapier();
+    const [, carModel] = await Promise.all([initRapier(), loadCarModel(CAR_MODEL_URL)]);
     const game = new Game(container);
-    game.setupScene();
+    game.setupScene(carModel);
     return game;
   }
 
@@ -79,7 +80,7 @@ export class Game {
     return this.car;
   }
 
-  private setupScene() {
+  private setupScene(carModel: CarModel) {
     const scene = this.scene;
     scene.background = new THREE.Color(0x9cc7e8);
     scene.fog = new THREE.Fog(0x9cc7e8, 250, 900);
@@ -99,8 +100,8 @@ export class Game {
     this.car = new Car(RAPIER, this.world, {
       position: { x: 0, y: 1.2, z: 0 },
       rotation: { x: 0, y: 0, z: 0, w: 1 },
-    });
-    this.carView = new CarView(this.car);
+    }, carModel.layout);
+    this.carView = new CarView(this.car, carModel);
     scene.add(this.carView.root);
     this.capturePose();
     this.capturePose();

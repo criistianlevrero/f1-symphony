@@ -11,6 +11,14 @@ export interface Spawn {
   rotation: Quat;
 }
 
+/** Geometría del auto en el espacio del chasis, sacada del modelo 3D. */
+export interface CarLayout {
+  /** Centro y radio de cada rueda, en el orden de FRONT_WHEELS / REAR_WHEELS. */
+  wheels: { center: Vec3; radius: number }[];
+  chassisCenter: Vec3;
+  chassisHalfExtents: Vec3;
+}
+
 // Orden de ruedas: 0 delantera izq, 1 delantera der, 2 trasera izq, 3 trasera der.
 export const FRONT_WHEELS = [0, 1];
 export const REAR_WHEELS = [2, 3];
@@ -45,11 +53,13 @@ export class Car {
     rapier: Rapier,
     private world: RAPIER.World,
     spawn: Spawn,
+    readonly layout: CarLayout,
     readonly tuning: CarTuning = carTuning,
   ) {
     this.spawn = spawn;
     const t = tuning;
-    const h = t.chassisHalfExtents;
+    const h = layout.chassisHalfExtents;
+    const c = layout.chassisCenter;
 
     this.body = world.createRigidBody(
       rapier.RigidBodyDesc.dynamic()
@@ -59,16 +69,22 @@ export class Car {
         .setCanSleep(false)
         .setCcdEnabled(true),
     );
-    // Masa explícita con centro de masa bajo para que no vuelque fácil.
+    // Masa explícita con centro de masa bajo (cerca de los ejes) para que no
+    // vuelque fácil. El centro de masa queda entre los ejes, en coordenadas del
+    // collider.
+    const ws = layout.wheels;
+    const axleY = ws.reduce((sum, w) => sum + w.center.y, 0) / ws.length;
+    const comX = (ws[FRONT_WHEELS[0]].center.x + ws[REAR_WHEELS[0]].center.x) / 2;
     const m = t.mass;
-    const [a, b, c] = [2 * h.x, 2 * h.y, 2 * h.z];
+    const [a, b, d] = [2 * h.x, 2 * h.y, 2 * h.z];
     world.createCollider(
       rapier.ColliderDesc.cuboid(h.x, h.y, h.z)
+        .setTranslation(c.x, c.y, c.z)
         .setFriction(0.3)
         .setMassProperties(
           m,
-          { x: 0, y: t.centerOfMassY, z: 0 },
-          { x: (m * (b * b + c * c)) / 12, y: (m * (a * a + c * c)) / 12, z: (m * (a * a + b * b)) / 12 },
+          { x: comX - c.x, y: axleY + t.centerOfMassY - c.y, z: 0 },
+          { x: (m * (b * b + d * d)) / 12, y: (m * (a * a + d * d)) / 12, z: (m * (a * a + b * b)) / 12 },
           { x: 0, y: 0, z: 0, w: 1 },
         ),
       this.body,
@@ -78,23 +94,25 @@ export class Car {
     this.vehicle.indexUpAxis = 1;
     this.vehicle.setIndexForwardAxis = 0;
 
-    const positions: Vec3[] = [
-      { x: t.wheelBaseX, y: t.wheelMountY, z: -t.wheelTrackZ },
-      { x: t.wheelBaseX, y: t.wheelMountY, z: t.wheelTrackZ },
-      { x: -t.wheelBaseX, y: t.wheelMountY, z: -t.wheelTrackZ },
-      { x: -t.wheelBaseX, y: t.wheelMountY, z: t.wheelTrackZ },
-    ];
-    for (const p of positions) {
-      this.vehicle.addWheel(p, { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, t.suspensionRestLength, t.wheelRadius);
+    for (const w of layout.wheels) {
+      this.vehicle.addWheel(this.wheelMount(w.center), { x: 0, y: -1, z: 0 }, { x: 0, y: 0, z: 1 }, t.suspensionRestLength, w.radius);
     }
     this.applyWheelTuning();
+  }
+
+  /**
+   * Punto de anclaje de la suspensión: arriba del centro de la rueda del modelo,
+   * de modo que con la suspensión en reposo la rueda queda donde está en el modelo.
+   */
+  private wheelMount(center: Vec3): Vec3 {
+    return { x: center.x, y: center.y + this.tuning.suspensionRestLength, z: center.z };
   }
 
   /** Reaplica los parámetros de rueda/suspensión (p. ej. desde el panel de ajuste). */
   applyWheelTuning() {
     const t = this.tuning;
     for (let i = 0; i < this.vehicle.numWheels(); i++) {
-      this.vehicle.setWheelRadius(i, t.wheelRadius);
+      this.vehicle.setWheelChassisConnectionPointCs(i, this.wheelMount(this.layout.wheels[i].center));
       this.vehicle.setWheelSuspensionRestLength(i, t.suspensionRestLength);
       this.vehicle.setWheelSuspensionStiffness(i, t.suspensionStiffness);
       this.vehicle.setWheelSuspensionCompression(i, t.suspensionCompression);
