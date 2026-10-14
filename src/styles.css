@@ -73,3 +73,27 @@ body,
   text-shadow: 0 1px 4px rgb(0 0 0 / 0.7);
   pointer-events: none;
 }
+.hud-time {
+  position: absolute;
+  left: 28px;
+  bottom: 22px;
+  color: #fff;
+  font-size: 32px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 8px rgb(0 0 0 / 0.6);
+  pointer-events: none;
+}
+.hud-banner {
+  position: absolute;
+  left: 50%;
+  top: 38%;
+  transform: translateX(-50%);
+  padding: 10px 22px;
+  border-radius: 10px;
+  background: rgb(10 12 16 / 0.65);
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  pointer-events: none;
+}

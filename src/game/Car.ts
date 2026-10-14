@@ -164,8 +164,6 @@ export class Car {
 
   /** Se llama una vez por paso fijo de física, antes de world.step(). */
   update(input: DriveInput, dt: number) {
-    if (input.reset) this.respawn();
-
     const t = this.tuning;
     const v = this.forwardSpeed;
     const speedRatio = Math.min(Math.abs(v) / t.topSpeed, 1);

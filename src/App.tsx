@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Game } from './game/Game';
 import { createTuningPanel } from './game/TuningPanel';
 import { Hud } from './ui/Hud';
+import { demoTrack } from './track/demo';
 
 export function App() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -13,7 +14,7 @@ export function App() {
     let instance: Game | null = null;
     let disposePanel: (() => void) | null = null;
 
-    Game.create(containerRef.current!)
+    Game.create(containerRef.current!, demoTrack())
       .then((g) => {
         if (cancelled) return g.dispose();
         instance = g;

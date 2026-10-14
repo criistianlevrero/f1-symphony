@@ -3,18 +3,30 @@ import RAPIER from '@dimforge/rapier3d-compat';
 import { Car } from './Car';
 import { CarView, loadCarModel, type CarModel } from './CarView';
 import { ChaseCamera } from './ChaseCamera';
+import { createEnvironment } from './environment';
 import { Keyboard } from './input';
-import { buildSandbox } from './sandbox';
+import { addGround, addTrackColliders } from './trackPhysics';
 import { carTuning } from './tuning';
+import { buildTrack, type BuiltTrack } from '../track/build';
+import type { TrackData } from '../track/types';
+import { ROAD_HALF_WIDTH } from '../track/pieces';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
 const CAR_MODEL_URL = `${import.meta.env.BASE_URL}models/car.glb`;
 
+export type RaceState = 'ready' | 'running' | 'finished';
+
 export interface Telemetry {
   speedKmh: number;
   wheelsOnGround: number;
   fps: number;
+  state: RaceState;
+  /** Segundos desde la largada. */
+  raceTime: number;
+  /** Metros recorridos sobre la línea central. */
+  progress: number;
+  trackLength: number;
 }
 
 let rapierReady: Promise<void> | null = null;
@@ -28,17 +40,26 @@ function initRapier() {
  * el loop de render/física no dispara renders de React.
  */
 export class Game {
-  readonly telemetry: Telemetry = { speedKmh: 0, wheelsOnGround: 0, fps: 0 };
+  readonly telemetry: Telemetry = {
+    speedKmh: 0,
+    wheelsOnGround: 0,
+    fps: 0,
+    state: 'ready',
+    raceTime: 0,
+    progress: 0,
+    trackLength: 0,
+  };
 
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.PerspectiveCamera(68, 1, 0.1, 2000);
+  private camera = new THREE.PerspectiveCamera(68, 1, 0.1, 3000);
   private chase = new ChaseCamera(this.camera);
-  private sun = new THREE.DirectionalLight(0xffffff, 2.2);
+  private sun!: THREE.DirectionalLight;
   private keyboard = new Keyboard();
   private world!: RAPIER.World;
   private car!: Car;
   private carView!: CarView;
+  private track!: BuiltTrack;
 
   private raf = 0;
   private lastTime = 0;
@@ -46,6 +67,8 @@ export class Game {
   private fpsFrames = 0;
   private fpsTime = 0;
   private disposed = false;
+  private pathHint = -1;
+  private finishSide = -1;
 
   // Pose anterior y actual del chasis para interpolar el render.
   private prevPos = new THREE.Vector3();
@@ -54,6 +77,7 @@ export class Game {
   private currRot = new THREE.Quaternion();
   private renderPos = new THREE.Vector3();
   private renderRot = new THREE.Quaternion();
+  private tmp = new THREE.Vector3();
 
   private resizeObserver: ResizeObserver;
 
@@ -69,10 +93,10 @@ export class Game {
     this.resize();
   }
 
-  static async create(container: HTMLElement) {
+  static async create(container: HTMLElement, track: TrackData) {
     const [, carModel] = await Promise.all([initRapier(), loadCarModel(CAR_MODEL_URL)]);
     const game = new Game(container);
-    game.setupScene(carModel);
+    game.setupScene(carModel, track);
     return game;
   }
 
@@ -80,36 +104,48 @@ export class Game {
     return this.car;
   }
 
-  private setupScene(carModel: CarModel) {
-    const scene = this.scene;
-    scene.background = new THREE.Color(0x9cc7e8);
-    scene.fog = new THREE.Fog(0x9cc7e8, 250, 900);
-    scene.add(new THREE.HemisphereLight(0xdfefff, 0x404858, 1.1));
+  get path() {
+    return this.track.path;
+  }
 
-    this.sun.position.set(60, 120, 40);
-    this.sun.castShadow = true;
-    this.sun.shadow.mapSize.set(2048, 2048);
-    const s = 40;
-    Object.assign(this.sun.shadow.camera, { left: -s, right: s, top: s, bottom: -s, near: 1, far: 300 });
-    scene.add(this.sun, this.sun.target);
+  private setupScene(carModel: CarModel, trackData: TrackData) {
+    this.sun = createEnvironment(this.scene).sun;
 
     this.world = new RAPIER.World({ x: 0, y: carTuning.gravity, z: 0 });
     this.world.timestep = FIXED_DT;
-    buildSandbox(RAPIER, this.world, scene);
+    addGround(RAPIER, this.world);
 
-    this.car = new Car(RAPIER, this.world, {
-      position: { x: 0, y: 1.2, z: 0 },
-      rotation: { x: 0, y: 0, z: 0, w: 1 },
-    }, carModel.layout);
+    this.track = buildTrack(trackData);
+    this.scene.add(this.track.group);
+    addTrackColliders(RAPIER, this.world, this.track.geometries);
+    this.telemetry.trackLength = this.track.path?.length ?? 0;
+
+    const { position: p, quaternion: q } = this.track.spawn;
+    this.car = new Car(
+      RAPIER,
+      this.world,
+      { position: { x: p.x, y: p.y, z: p.z }, rotation: { x: q.x, y: q.y, z: q.z, w: q.w } },
+      carModel.layout,
+    );
     this.carView = new CarView(this.car, carModel);
-    scene.add(this.carView.root);
-    this.capturePose();
-    this.capturePose();
+    this.scene.add(this.carView.root);
+    this.restart();
   }
 
   /** Cambia la gravedad (usado por el panel de ajuste). */
   setGravity(g: number) {
     this.world.gravity = { x: 0, y: g, z: 0 };
+  }
+
+  /** Vuelve a la largada y reinicia el cronómetro. */
+  restart() {
+    this.car.respawn();
+    Object.assign(this.telemetry, { state: 'ready', raceTime: 0, progress: 0 });
+    this.pathHint = -1;
+    this.finishSide = -1;
+    this.capturePose();
+    this.capturePose();
+    this.chase.snap();
   }
 
   start() {
@@ -131,6 +167,50 @@ export class Game {
     this.currRot.set(r.x, r.y, r.z, r.w);
   }
 
+  private step() {
+    const input = this.keyboard.read();
+    const t = this.telemetry;
+    if (input.reset || this.currPos.y < this.track.minY - 30) {
+      this.restart();
+      return;
+    }
+    if (t.state === 'ready' && (input.throttle > 0 || input.brake > 0)) t.state = 'running';
+
+    this.car.update(input, FIXED_DT);
+    this.world.step();
+    this.capturePose();
+
+    if (t.state === 'running') {
+      t.raceTime += FIXED_DT;
+      this.updateProgress();
+      this.checkFinish();
+    }
+  }
+
+  private updateProgress() {
+    const path = this.track.path;
+    if (!path) return;
+    const proj = path.project(this.currPos, this.pathHint);
+    // Si nos alejamos mucho (salto, atajo), buscar en todo el recorrido.
+    const p = proj.distance > 25 ? path.project(this.currPos) : proj;
+    this.pathHint = p.index;
+    this.telemetry.progress = p.s;
+  }
+
+  /** Detecta el cruce de la línea de llegada (plano en la entrada del tramo de llegada). */
+  private checkFinish() {
+    const f = this.track.finish;
+    if (!f) return;
+    const rel = this.tmp.subVectors(this.currPos, f.p);
+    const side = Math.sign(rel.dot(f.t));
+    const lateral = Math.abs(rel.dot(f.right));
+    const vertical = rel.dot(f.up);
+    if (this.finishSide < 0 && side >= 0 && lateral < ROAD_HALF_WIDTH + 2 && vertical > -2 && vertical < 8) {
+      this.telemetry.state = 'finished';
+    }
+    this.finishSide = side;
+  }
+
   private frame(now: number) {
     const frameDt = Math.min((now - this.lastTime) / 1000, 0.25);
     this.lastTime = now;
@@ -139,11 +219,7 @@ export class Game {
     this.accumulator += frameDt;
     let steps = 0;
     while (this.accumulator >= FIXED_DT && steps < MAX_STEPS_PER_FRAME) {
-      const input = this.keyboard.read();
-      this.car.update(input, FIXED_DT);
-      this.world.step();
-      this.capturePose();
-      if (input.reset) this.capturePose(); // sin interpolar el teletransporte
+      this.step();
       this.accumulator -= FIXED_DT;
       steps++;
     }
@@ -189,6 +265,7 @@ export class Game {
     this.keyboard.dispose();
     this.car.dispose();
     this.world.free();
+    this.track.geometries.forEach((g) => g.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
