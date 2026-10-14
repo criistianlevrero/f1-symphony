@@ -1,42 +1,53 @@
-import { useEffect, useRef, useState } from 'react';
-import { Game } from './game/Game';
-import { createTuningPanel } from './game/TuningPanel';
-import { Hud } from './ui/Hud';
-import { demoTrack } from './track/demo';
+import { useCallback, useState } from 'react';
+import type { TrackData } from './track/types';
+import { EditorScreen } from './ui/EditorScreen';
+import { MenuScreen } from './ui/MenuScreen';
+import { PlayScreen } from './ui/PlayScreen';
+
+type Screen =
+  | { kind: 'menu' }
+  | { kind: 'edit' }
+  | { kind: 'play'; track: TrackData; from: 'menu' | 'edit' };
 
 export function App() {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [game, setGame] = useState<Game | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [screen, setScreen] = useState<Screen>({ kind: 'menu' });
+  // Pista abierta en el editor: sobrevive a ir a "Probar" y volver.
+  const [editing, setEditing] = useState<{ track: TrackData; dirty: boolean } | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    let instance: Game | null = null;
-    let disposePanel: (() => void) | null = null;
+  const toMenu = useCallback(() => {
+    if (editing?.dirty && !confirm('Hay cambios sin guardar. ¿Salir igual?')) return;
+    setEditing(null);
+    setScreen({ kind: 'menu' });
+  }, [editing]);
 
-    Game.create(containerRef.current!, demoTrack())
-      .then((g) => {
-        if (cancelled) return g.dispose();
-        instance = g;
-        disposePanel = createTuningPanel(g);
-        g.start();
-        setGame(g);
-      })
-      .catch((e: unknown) => setError(String(e)));
-
-    return () => {
-      cancelled = true;
-      disposePanel?.();
-      instance?.dispose();
-    };
+  const exitPlay = useCallback(() => {
+    setScreen((s) => (s.kind === 'play' && s.from === 'edit' ? { kind: 'edit' } : { kind: 'menu' }));
   }, []);
 
-  return (
-    <div className="app">
-      <div ref={containerRef} className="viewport" />
-      {game && <Hud game={game} />}
-      {!game && !error && <div className="overlay">Cargando…</div>}
-      {error && <div className="overlay error">{error}</div>}
-    </div>
-  );
+  switch (screen.kind) {
+    case 'menu':
+      return (
+        <MenuScreen
+          onPlay={(track) => setScreen({ kind: 'play', track, from: 'menu' })}
+          onEdit={(track) => {
+            setEditing({ track, dirty: false });
+            setScreen({ kind: 'edit' });
+          }}
+        />
+      );
+    case 'edit':
+      return editing ? (
+        <EditorScreen
+          track={editing.track}
+          dirty={editing.dirty}
+          onChange={(track, dirty) => setEditing({ track, dirty })}
+          onPlay={() => setScreen({ kind: 'play', track: editing.track, from: 'edit' })}
+          onExit={toMenu}
+        />
+      ) : null;
+    case 'play':
+      return (
+        <PlayScreen track={screen.track} onExit={exitPlay} exitLabel={screen.from === 'edit' ? 'Editor' : 'Menú'} />
+      );
+  }
 }
