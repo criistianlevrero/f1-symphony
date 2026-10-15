@@ -132,6 +132,31 @@ las que terminan. Lo que cambia es **quién marca el beat**:
   máximo alcanzado, y se apaga con un fade si el tempo cae debajo de un mínimo
   (auto parado, marcha atrás, respawn).
 
+## Riesgos conocidos
+
+- **Contexto de Tone.js vs. nodos nativos.** Tone envuelve el `AudioContext` con
+  `standardized-audio-context`. Conectar un nodo nativo a uno de Tone (o al revés)
+  puede fallar con "cannot connect to an AudioNode belonging to a different audio
+  context" si los dos contextos no son el mismo objeto. Para evitarlo, todo el audio
+  usa el contexto crudo de Tone (`Tone.getContext().rawContext`) y los nodos
+  nativos se conectan entre sí o a la entrada nativa de un nodo de Tone
+  (`toneNode.input`). Síntomas si reaparece: excepción al conectar, o un instrumento
+  que no suena mientras los demás sí. También vigilar el destrabe del audio en
+  iOS/Safari: el contexto se tiene que crear o reactivar dentro de un gesto del
+  usuario.
+- **El índice de Tone crea el `AudioContext` al importarse** (`import … from 'tone'`
+  evalúa `getContext()` para exportar `Transport`, `Destination`, etc.). Eso pasa
+  fuera de un gesto del usuario. Por eso el código importa cada clase desde su
+  módulo (`tone/build/esm/instrument/PolySynth.js`, `…/core/Global.js`): el
+  contexto se crea recién en el primer `getSynth()`, dentro del gesto. Si una
+  actualización de Tone agrega un campo `exports` en su `package.json`, esos
+  imports pueden dejar de resolverse.
+- **`lookAhead` de Tone en 0.** Tone aplica los cambios de parámetros
+  (`volume.value = …`) en `context.now()`, que por defecto es el tiempo actual más
+  0,1 s. Como el secuenciador programa con tiempos exactos, la primera nota de un
+  instrumento recién creado salía a 0 dB antes de que se aplicara su volumen. Se
+  fija `lookAhead = 0` al crear el `Synth`; no volver a subirlo.
+
 ## Etapas
 
 1. Este documento.

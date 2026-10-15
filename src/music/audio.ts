@@ -1,16 +1,31 @@
+// Import directo del módulo: el índice de Tone crea el AudioContext al importarse,
+// fuera de un gesto del usuario (ver docs/AUDIO.md, «Riesgos conocidos»).
+import { getContext } from 'tone/build/esm/core/Global.js';
 import { midiToFreq } from './theory';
 
 /**
- * Sintetizador mínimo con Web Audio: un tono tipo marimba/campana para las notas
- * y un click para el metrónomo. Sin samples ni dependencias.
+ * Salida de audio de la app: un tono tipo marimba/campana para las notas, un click
+ * para el metrónomo y el bus donde se conectan los instrumentos.
  */
+/** Corte de seguridad para una voz que nunca se suelta (s). */
+const MAX_VOICE = 30;
+
 export class Synth {
+  /**
+   * El contexto crudo de Tone (latencia «interactive»), compartido con los
+   * instrumentos para que nodos nativos y de Tone se puedan conectar.
+   */
   readonly ctx: AudioContext;
-  private master: GainNode;
+  /** Entrada del bus principal (con eco y compresor). */
+  readonly master: GainNode;
   private clickGain: GainNode;
 
   constructor() {
-    this.ctx = new AudioContext({ latencyHint: 'interactive' });
+    const tone = getContext();
+    // El secuenciador programa con tiempos exactos; sin esto Tone corre sus cambios
+    // de parámetros (volumen, etc.) 0,1 s hacia adelante y la primera nota sale fuerte.
+    tone.lookAhead = 0;
+    this.ctx = tone.rawContext as AudioContext;
     const comp = this.ctx.createDynamicsCompressor();
     comp.connect(this.ctx.destination);
     this.master = this.ctx.createGain();
@@ -46,15 +61,22 @@ export class Synth {
   /** Toca una nota MIDI. `when` en segundos del AudioContext (0 = ya). */
   note(midi: number, duration: number, when = 0, velocity = 1) {
     const t = Math.max(when, this.ctx.currentTime);
+    this.voice(midi, t, velocity)(t + Math.max(0.12, Math.min(duration, 2.5)));
+  }
+
+  /**
+   * Arranca una nota de marimba en `when` hacia `dest` y devuelve la función que la
+   * suelta (con una cola de 0,35 s). Si nunca se suelta, se corta a los 30 s.
+   */
+  voice(midi: number, when: number, velocity = 1, dest: AudioNode = this.master) {
+    const t = when;
     const f = midiToFreq(midi);
-    const dur = Math.max(0.12, Math.min(duration, 2.5));
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(0.5 * velocity, t + 0.006);
     env.gain.exponentialRampToValueAtTime(0.18 * velocity, t + 0.25);
-    env.gain.setValueAtTime(0.18 * velocity, t + dur);
-    env.gain.exponentialRampToValueAtTime(0.0001, t + dur + 0.35);
-    env.connect(this.master);
+    env.connect(dest);
+    const oscs: OscillatorNode[] = [];
 
     const partials: [OscillatorType, number, number][] = [
       ['triangle', 1, 1],
@@ -70,8 +92,24 @@ export class Synth {
       osc.connect(g);
       g.connect(env);
       osc.start(t);
-      osc.stop(t + dur + 0.4);
+      osc.stop(t + MAX_VOICE);
+      oscs.push(osc);
     }
+    let released = false;
+    return (at: number) => {
+      if (released) return;
+      released = true;
+      const r = Math.max(at, t + 0.12, this.ctx.currentTime);
+      if (r >= t + MAX_VOICE) return;
+      // Mantiene el valor que tenga la envolvente en r y desde ahí hace la cola.
+      if (env.gain.cancelAndHoldAtTime) env.gain.cancelAndHoldAtTime(r);
+      else {
+        env.gain.cancelScheduledValues(r);
+        env.gain.setValueAtTime(0.18 * velocity, r);
+      }
+      env.gain.exponentialRampToValueAtTime(0.0001, r + 0.35);
+      for (const osc of oscs) osc.stop(r + 0.4);
+    };
   }
 
   /** Click de metrónomo; `accent` para el primer tiempo del compás. */

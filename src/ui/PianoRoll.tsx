@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSynth } from '../music/audio';
+import { audioDeps, fixedClock, Sequencer } from '../music/Sequencer';
+import { songLengthBeats } from '../music/song';
 import { isBlackKey, noteName, pitchHue } from '../music/theory';
 import type { Song, SongNote } from '../track/types';
 
@@ -244,18 +246,28 @@ export function PianoRoll({ song, notes, onChange, availableBeats, noteLength }:
     return () => el.removeEventListener('wheel', handler);
   }, []);
 
-  // Reproducción de prueba.
+  // Reproducción de prueba: todas las pistas, con el secuenciador.
+  const seqRef = useRef<Sequencer | null>(null);
+  useEffect(() => seqRef.current?.setSong(song), [song]);
+  useEffect(
+    () => () => {
+      seqRef.current?.dispose();
+      seqRef.current = null;
+    },
+    [],
+  );
   const stop = useCallback(() => stopRef.current(), []);
   const play = () => {
     stop();
     const synth = getSynth();
-    const spb = 60 / song.bpm;
-    const t0 = synth.now + 0.1;
-    for (const n of notes) synth.note(n.pitch, n.duration * spb, t0 + n.beat * spb);
-    const end = Math.max(0, ...notes.map((n) => n.beat + n.duration));
+    seqRef.current ??= new Sequencer(audioDeps(synth));
+    const seq = seqRef.current;
+    seq.setSong(song);
+    seq.start(fixedClock(song.bpm, synth.now + 0.1, 0), 0);
+    const end = songLengthBeats(song);
     let raf = 0;
     const tick = () => {
-      const beat = (synth.now - t0) / spb;
+      const beat = seq.beat ?? 0;
       if (beat > end + 0.5) return stopRef.current();
       setPlayhead(Math.max(0, beat));
       raf = requestAnimationFrame(tick);
@@ -263,8 +275,8 @@ export function PianoRoll({ song, notes, onChange, availableBeats, noteLength }:
     raf = requestAnimationFrame(tick);
     stopRef.current = () => {
       cancelAnimationFrame(raf);
+      seq.stop();
       setPlayhead(null);
-      // Las notas ya programadas en Web Audio se apagan solas; no hace falta cortarlas.
       stopRef.current = () => {};
     };
   };
@@ -274,7 +286,7 @@ export function PianoRoll({ song, notes, onChange, availableBeats, noteLength }:
     <div className="pianoroll">
       <div className="pianoroll-bar">
         {playhead === null ? (
-          <button className="btn primary" onClick={play} disabled={!notes.length}>
+          <button className="btn primary" onClick={play} disabled={!songLengthBeats(song)}>
             ▶ Escuchar
           </button>
         ) : (
