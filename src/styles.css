@@ -457,9 +457,73 @@ kbd {
 .pianoroll-bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
+}
+.pianoroll-bar .transport,
+.pianoroll-bar .track-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pianoroll-bar .transport .btn {
+  min-width: 36px;
+}
+.pianoroll-bar .position {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+  color: #9aa5b8;
+  font-size: 12px;
+}
+.pianoroll-bar select,
+.pianoroll-bar .track-title {
+  background: #20262f;
+  color: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+}
+.pianoroll-bar .track-title {
+  width: 110px;
+}
+.pianoroll-bar input[type='range'] {
+  width: 70px;
+}
+.pianoroll-help {
+  padding: 4px 10px;
+  border-top: 1px solid var(--line);
+}
+.repeat-popup {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: #232a35;
+  border: 1px solid #ffcc33;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.4);
+  font-size: 13px;
+  z-index: 2;
+}
+.repeat-popup input {
+  width: 48px;
+  margin-left: 2px;
+}
+.pianoroll-toast {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 6px 10px;
+  background: rgba(35, 42, 53, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+  pointer-events: none;
 }
 .pianoroll-canvas {
   position: relative;

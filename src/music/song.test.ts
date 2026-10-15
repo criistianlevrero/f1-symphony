@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Repeat, SongNote, SongTrack } from '../track/types';
-import { songLengthBeats, unroll, writtenBeat } from './song';
+import { addRepeat, moveSelection, playedBeat, playedRepeat, songLengthBeats, unroll, unrollWithSource, writtenBeat } from './song';
 
 const note = (beat: number, pitch = 60, duration = 1): SongNote => ({ pitch, beat, duration });
 const track = (notes: SongNote[], repeats: Repeat[] = []): SongTrack => ({ id: 't', name: 'T', instrument: 'marimba', notes, repeats });
@@ -79,5 +79,78 @@ describe('songLengthBeats', () => {
     const lead = track([note(0, 60, 4)]);
     const drums = track([note(3)], [{ start: 0, end: 4, times: 4 }]);
     expect(songLengthBeats({ bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 0, tracks: [lead, drums] })).toBe(16);
+  });
+});
+
+describe('unrollWithSource y playedBeat', () => {
+  const t = track([note(1), note(5), note(9)], [{ start: 4, end: 8, times: 3 }]);
+
+  it('indica de qué nota escrita y de qué vuelta viene cada nota', () => {
+    expect(unrollWithSource(t).map((p) => [p.note.beat, p.index, p.copy])).toEqual([
+      [1, 0, 0],
+      [5, 1, 0],
+      [9, 1, 1],
+      [13, 1, 2],
+      [17, 2, 0],
+    ]);
+  });
+
+  it('playedBeat ubica la primera vuelta de un beat escrito', () => {
+    expect(playedBeat(t, 1)).toBe(1);
+    expect(playedBeat(t, 5)).toBe(5);
+    expect(playedBeat(t, 8)).toBe(16);
+    expect(playedRepeat(t, t.repeats[0])).toEqual({ start: 4, end: 16, firstEnd: 8 });
+  });
+});
+
+describe('addRepeat', () => {
+  const t = track([], [{ start: 4, end: 8, times: 2 }]);
+
+  it('agrega y ordena', () => {
+    expect(addRepeat(t, { start: 0, end: 4, times: 3 })).toEqual([
+      { start: 0, end: 4, times: 3 },
+      { start: 4, end: 8, times: 2 },
+    ]);
+  });
+
+  it('rechaza superposiciones y tramos inválidos', () => {
+    expect(typeof addRepeat(t, { start: 6, end: 10, times: 2 })).toBe('string');
+    expect(typeof addRepeat(t, { start: 0, end: 0, times: 2 })).toBe('string');
+    expect(typeof addRepeat(t, { start: 0, end: 4, times: 1 })).toBe('string');
+  });
+});
+
+describe('moveSelection', () => {
+  const t = track([note(0, 60), note(2, 62), note(4, 64)], [
+    { start: 0, end: 4, times: 2 },
+    { start: 8, end: 12, times: 2 },
+  ]);
+
+  it('mueve solo lo seleccionado', () => {
+    const m = moveSelection(t, new Set([1]), new Set(), 1, 2, 48, 84)!;
+    expect(m.notes).toEqual([note(0, 60), note(3, 64), note(4, 64)]);
+    expect(m.repeats).toEqual(t.repeats);
+  });
+
+  it('mueve notas y repeticiones juntas (Ctrl+A)', () => {
+    const m = moveSelection(t, new Set([0, 1, 2]), new Set([0, 1]), 4, 0, 48, 84)!;
+    expect(m.notes.map((n) => n.beat)).toEqual([4, 6, 8]);
+    expect(m.repeats).toEqual([
+      { start: 4, end: 8, times: 2 },
+      { start: 12, end: 16, times: 2 },
+    ]);
+  });
+
+  it('no deja nada antes del beat 0 ni fuera del rango de alturas', () => {
+    const m = moveSelection(t, new Set([1, 2]), new Set(), -10, 30, 48, 84)!;
+    expect(m.notes.map((n) => [n.beat, n.pitch])).toEqual([
+      [0, 60],
+      [0, 82],
+      [2, 84],
+    ]);
+  });
+
+  it('rechaza mover una repetición encima de otra', () => {
+    expect(moveSelection(t, new Set(), new Set([0]), 6, 0, 48, 84)).toBeNull();
   });
 });

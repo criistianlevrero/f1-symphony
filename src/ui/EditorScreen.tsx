@@ -3,7 +3,7 @@ import { Editor, type EditorCursor } from '../editor/Editor';
 import { PIECE_ORDER, PIECES } from '../track/pieces';
 import { exportTrackFile, saveTrack } from '../track/storage';
 import { isThemeId, THEME_ORDER, THEMES } from '../track/themes';
-import type { PieceType, Song, SongNote, TrackData } from '../track/types';
+import type { PieceType, Song, TrackData } from '../track/types';
 import { availableBeats, mainTrack, songLengthBeats, unroll } from '../music/song';
 import { PianoRoll } from './PianoRoll';
 import { PieceIcon } from './PieceIcon';
@@ -52,6 +52,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   const [tab, setTab] = useState<'track' | 'music' | 'decor'>('track');
   const [pathLength, setPathLength] = useState(0);
   const [noteLength, setNoteLength] = useState(1);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
 
   useEffect(() => {
     const editor = new Editor(containerRef.current!, trackRef.current.pieces, trackRef.current.theme, {
@@ -79,7 +80,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   const setSong = (patch: Partial<Song>) => onChange({ ...track, song: { ...track.song, ...patch } }, true);
   const song = track.song;
   const main = mainTrack(song);
-  const setMainNotes = (notes: SongNote[]) => setSong({ tracks: song.tracks.map((t) => (t === main ? { ...t, notes } : t)) });
+  const current = song.tracks.find((t) => t.id === selectedTrackId) ?? main;
   const beatsFit = availableBeats(song, pathLength);
   const songBeats = songLengthBeats(song);
   const outside = unroll(main).filter((n) => n.beat > beatsFit).length;
@@ -217,12 +218,19 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
               </select>
             </label>
             <div className="info">
-              En la pista entran <b>{Math.floor(beatsFit)}</b> beats ({(beatsFit / song.beatsPerBar).toFixed(1)} compases). La melodía dura{' '}
+              En la pista entran <b>{Math.floor(beatsFit)}</b> beats ({(beatsFit / song.beatsPerBar).toFixed(1)} compases). La canción dura{' '}
               <b>{songBeats}</b> beats.
               {outside > 0 && <div className="hint">{outside} nota(s) quedan fuera de la pista: alargala, subí la velocidad o bajá el tempo.</div>}
             </div>
-            <button className="btn ghost danger" disabled={!main.notes.length} onClick={() => confirm('¿Borrar toda la melodía?') && setMainNotes([])}>
-              Borrar melodía
+            <button
+              className="btn ghost danger"
+              disabled={!current.notes.length && !current.repeats.length}
+              onClick={() =>
+                confirm(`¿Vaciar la pista «${current.name}»?`) &&
+                setSong({ tracks: song.tracks.map((t) => (t === current ? { ...t, notes: [], repeats: [] } : t)) })
+              }
+            >
+              Vaciar pista «{current.name}»
             </button>
           </>
         )}
@@ -253,7 +261,16 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
           <dd>deshacer / rehacer</dd>
         </dl>
       </aside>
-      {tab === 'music' && <PianoRoll song={song} notes={main.notes} onChange={setMainNotes} availableBeats={beatsFit} noteLength={noteLength} />}
+      {tab === 'music' && (
+        <PianoRoll
+          song={song}
+          selectedTrack={current}
+          onSelectTrack={setSelectedTrackId}
+          onTracksChange={(tracks) => setSong({ tracks })}
+          availableBeats={beatsFit}
+          noteLength={noteLength}
+        />
+      )}
     </div>
   );
 }

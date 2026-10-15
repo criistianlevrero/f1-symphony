@@ -176,6 +176,15 @@ export class Sequencer {
     }
   }
 
+  /** Toca una nota suelta con el instrumento de una pista (para probar en el editor). */
+  preview(trackId: string, pitch: number, duration = 0.3) {
+    const inst = this.voices.get(trackId)?.out.instrument;
+    if (!inst) return;
+    const now = this.deps.now();
+    inst.noteOn(pitch, VELOCITY, now);
+    inst.noteOff(pitch, now + duration);
+  }
+
   private release(v: Voice, now: number) {
     v.sounding = [];
     v.out.instrument.allNotesOff(now);

@@ -118,6 +118,22 @@ interface Repeat {
   vueltas extra se ven semitransparentes, con un corchete "×n" en la regla. Editar
   una nota convierte su beat tocado en beat escrito.
 
+### Piano roll multipista
+
+- Barra de pista: selector (★ = principal), nombre, instrumento, volumen, hacer
+  principal, agregar y borrar (la principal no se borra).
+- Se edita la pista seleccionada; las demás se dibujan detrás, semitransparentes.
+- **Selección:** click selecciona una nota; arrastrar una nota seleccionada mueve toda
+  la selección. Ctrl+click suma o quita; Ctrl+arrastrar en vacío selecciona por
+  rectángulo. Ctrl+A selecciona todas las notas **y las repeticiones** de la pista,
+  para moverlas juntas. Supr borra lo seleccionado; Esc deselecciona. Los
+  movimientos se miden en beats escritos (`moveSelection`).
+- **Repeticiones:** arrastrar sobre la regla marca un tramo (ajustado a compases) y
+  abre «Repetir c.x–y ×n». Click en un corchete permite cambiar las vueltas o
+  quitarla. El tramo no puede incluir vueltas extra de otra repetición.
+- **Transporte:** ▶/⏸ (espacio) y ■. Click en la regla mueve el cabezal; en pausa el
+  cabezal queda donde estaba (amarillo).
+
 ### Secuenciador y director de tempo
 
 Un solo `Sequencer` toca las pistas desplegadas con lookahead (patrón "A Tale of

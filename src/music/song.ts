@@ -23,15 +23,22 @@ export function mainTrack(song: Song): SongTrack {
 
 const byStart = (repeats: Repeat[]) => [...repeats].sort((a, b) => a.start - b.start);
 
+/** Nota desplegada, con el índice de la nota escrita y la vuelta (0 = la escrita). */
+export interface PlayedNote {
+  note: SongNote;
+  index: number;
+  copy: number;
+}
+
 /**
  * Despliega las repeticiones: devuelve las notas en beats tocados. Cada repetición
  * inserta (times − 1) vueltas extra y corre lo que sigue en esa pista. Una nota que
  * empieza dentro del tramo se copia en cada vuelta con su duración original.
  */
-export function unroll(track: SongTrack): SongNote[] {
+export function unrollWithSource(track: SongTrack): PlayedNote[] {
   const repeats = byStart(track.repeats);
-  const out: SongNote[] = [];
-  for (const n of track.notes) {
+  const out: PlayedNote[] = [];
+  track.notes.forEach((n, index) => {
     let shift = 0;
     let copies = 1;
     let len = 0;
@@ -44,9 +51,68 @@ export function unroll(track: SongTrack): SongNote[] {
         break;
       } else break;
     }
-    for (let k = 0; k < copies; k++) out.push({ ...n, beat: n.beat + shift + k * len });
+    for (let copy = 0; copy < copies; copy++) out.push({ note: { ...n, beat: n.beat + shift + copy * len }, index, copy });
+  });
+  return out.sort((a, b) => a.note.beat - b.note.beat || a.note.pitch - b.note.pitch);
+}
+
+export function unroll(track: SongTrack): SongNote[] {
+  return unrollWithSource(track).map((p) => p.note);
+}
+
+/** Beat tocado de la primera vuelta de un beat escrito. */
+export function playedBeat(track: SongTrack, written: number): number {
+  let shift = 0;
+  for (const r of byStart(track.repeats)) if (written >= r.end) shift += (r.times - 1) * (r.end - r.start);
+  return written + shift;
+}
+
+/** Tramo tocado que ocupa una repetición, con todas sus vueltas. */
+export function playedRepeat(track: SongTrack, r: Repeat) {
+  const start = playedBeat(track, r.start);
+  return { start, end: start + r.times * (r.end - r.start), firstEnd: start + (r.end - r.start) };
+}
+
+const overlaps = (a: Repeat, b: Repeat) => a.start < b.end && b.start < a.end;
+
+/** Agrega una repetición. Devuelve la lista nueva, o un mensaje si no se puede. */
+export function addRepeat(track: SongTrack, r: Repeat): Repeat[] | string {
+  if (r.end <= r.start) return 'El tramo está vacío';
+  if (r.times < 2) return 'Tiene que sonar al menos dos veces';
+  if (track.repeats.some((o) => overlaps(o, r))) return 'Se superpone con otra repetición';
+  return byStart([...track.repeats, r]);
+}
+
+/**
+ * Mueve las notas y repeticiones seleccionadas `dBeat` beats escritos y `dPitch`
+ * semitonos. Ajusta el movimiento para que nada quede antes del beat 0 ni fuera de
+ * [low, high]. Devuelve null si las repeticiones se superpondrían.
+ */
+export function moveSelection(
+  track: SongTrack,
+  notes: ReadonlySet<number>,
+  repeats: ReadonlySet<number>,
+  dBeat: number,
+  dPitch: number,
+  low: number,
+  high: number,
+): SongTrack | null {
+  const selNotes = track.notes.filter((_, i) => notes.has(i));
+  const selRepeats = track.repeats.filter((_, i) => repeats.has(i));
+  const minBeat = Math.min(...selNotes.map((n) => n.beat), ...selRepeats.map((r) => r.start));
+  if (Number.isFinite(minBeat)) dBeat = Math.max(dBeat, -minBeat);
+  if (selNotes.length) {
+    dPitch = Math.max(dPitch, low - Math.min(...selNotes.map((n) => n.pitch)));
+    dPitch = Math.min(dPitch, high - Math.max(...selNotes.map((n) => n.pitch)));
   }
-  return out.sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
+  const moved = track.repeats.map((r, i) => (repeats.has(i) ? { ...r, start: r.start + dBeat, end: r.end + dBeat } : r));
+  if (moved.some((a, i) => moved.some((b, j) => i < j && overlaps(a, b)))) return null;
+  return {
+    ...track,
+    notes: track.notes.map((n, i) => (notes.has(i) ? { ...n, beat: n.beat + dBeat, pitch: n.pitch + dPitch } : n)),
+    // Se conserva el orden para que los índices de la selección sigan valiendo.
+    repeats: moved,
+  };
 }
 
 /**
