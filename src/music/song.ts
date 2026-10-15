@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import type { Frame } from '../track/layout';
 import type { TrackPath } from '../track/TrackPath';
-import type { Song, SongNote } from '../track/types';
+import type { Repeat, Song, SongNote, SongTrack } from '../track/types';
 
 /** Distancia libre al final del recorrido donde no se ubican marcadores (m). */
 const END_MARGIN = 8;
@@ -16,8 +16,59 @@ export function availableBeats(song: Song, pathLength: number) {
   return Math.max(0, distanceToBeat(song, pathLength - END_MARGIN));
 }
 
+/** La pista del auto. La validación al cargar garantiza que existe. */
+export function mainTrack(song: Song): SongTrack {
+  return song.tracks.find((t) => t.main) ?? song.tracks[0];
+}
+
+const byStart = (repeats: Repeat[]) => [...repeats].sort((a, b) => a.start - b.start);
+
+/**
+ * Despliega las repeticiones: devuelve las notas en beats tocados. Cada repetición
+ * inserta (times − 1) vueltas extra y corre lo que sigue en esa pista. Una nota que
+ * empieza dentro del tramo se copia en cada vuelta con su duración original.
+ */
+export function unroll(track: SongTrack): SongNote[] {
+  const repeats = byStart(track.repeats);
+  const out: SongNote[] = [];
+  for (const n of track.notes) {
+    let shift = 0;
+    let copies = 1;
+    let len = 0;
+    for (const r of repeats) {
+      const extra = (r.times - 1) * (r.end - r.start);
+      if (n.beat >= r.end) shift += extra;
+      else if (n.beat >= r.start) {
+        copies = r.times;
+        len = r.end - r.start;
+        break;
+      } else break;
+    }
+    for (let k = 0; k < copies; k++) out.push({ ...n, beat: n.beat + shift + k * len });
+  }
+  return out.sort((a, b) => a.beat - b.beat || a.pitch - b.pitch);
+}
+
+/**
+ * Inverso de `unroll`: convierte un beat tocado en beat escrito. Devuelve `null` si
+ * cae en una vuelta extra (una copia que no se edita directamente).
+ */
+export function writtenBeat(track: SongTrack, played: number): number | null {
+  let shift = 0;
+  for (const r of byStart(track.repeats)) {
+    const len = r.end - r.start;
+    const start = r.start + shift;
+    if (played < start) break;
+    if (played < start + len) return played - shift;
+    if (played < start + r.times * len) return null;
+    shift += (r.times - 1) * len;
+  }
+  return played - shift;
+}
+
+/** Largo de la canción en beats tocados: la pista desplegada más larga. */
 export function songLengthBeats(song: Song) {
-  return song.notes.reduce((m, n) => Math.max(m, n.beat + n.duration), 0);
+  return song.tracks.reduce((m, t) => unroll(t).reduce((mm, n) => Math.max(mm, n.beat + n.duration), m), 0);
 }
 
 export interface Marker {
@@ -33,14 +84,15 @@ export interface Marker {
 }
 
 /**
- * Ubica un marcador por cada momento de la melodía sobre la línea central:
- * s = inicio + velocidadDeDiseño × tiempo. Devuelve también las notas que no
- * entran en la pista.
+ * Ubica un marcador por cada momento de la pista principal (desplegada) sobre la
+ * línea central: s = inicio + velocidadDeDiseño × tiempo. Devuelve también las
+ * notas que no entran en la pista.
  */
 export function computeMarkers(song: Song, path: TrackPath | null): { markers: Marker[]; overflow: number } {
-  if (!path) return { markers: [], overflow: song.notes.length };
+  const notes = unroll(mainTrack(song));
+  if (!path) return { markers: [], overflow: notes.length };
   const groups = new Map<number, SongNote[]>();
-  for (const n of song.notes) {
+  for (const n of notes) {
     const key = Math.round(n.beat * 1000) / 1000;
     groups.set(key, [...(groups.get(key) ?? []), n]);
   }

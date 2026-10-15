@@ -14,7 +14,7 @@ import { getTheme } from '../track/themes';
 import type { Song, TrackData } from '../track/types';
 import { ROAD_HALF_WIDTH } from '../track/pieces';
 import { MusicRun } from '../music/MusicRun';
-import { distanceToBeat } from '../music/song';
+import { distanceToBeat, mainTrack } from '../music/song';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -135,7 +135,7 @@ export class Game {
     addTrackColliders(RAPIER, this.world, this.track.geometries);
     this.telemetry.trackLength = this.track.path?.length ?? 0;
 
-    if (trackData.song.notes.length > 0 && this.track.path) {
+    if (mainTrack(trackData.song).notes.length > 0 && this.track.path) {
       this.music = new MusicRun(trackData.song, this.track.path);
       this.scene.add(this.music.view.group);
     }

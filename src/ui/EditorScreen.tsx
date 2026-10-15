@@ -3,8 +3,8 @@ import { Editor, type EditorCursor } from '../editor/Editor';
 import { PIECE_ORDER, PIECES } from '../track/pieces';
 import { exportTrackFile, saveTrack } from '../track/storage';
 import { isThemeId, THEME_ORDER, THEMES } from '../track/themes';
-import type { PieceType, Song, TrackData } from '../track/types';
-import { availableBeats, songLengthBeats } from '../music/song';
+import type { PieceType, Song, SongNote, TrackData } from '../track/types';
+import { availableBeats, mainTrack, songLengthBeats, unroll } from '../music/song';
 import { PianoRoll } from './PianoRoll';
 import { PieceIcon } from './PieceIcon';
 
@@ -78,9 +78,11 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
 
   const setSong = (patch: Partial<Song>) => onChange({ ...track, song: { ...track.song, ...patch } }, true);
   const song = track.song;
+  const main = mainTrack(song);
+  const setMainNotes = (notes: SongNote[]) => setSong({ tracks: song.tracks.map((t) => (t === main ? { ...t, notes } : t)) });
   const beatsFit = availableBeats(song, pathLength);
   const songBeats = songLengthBeats(song);
-  const outside = song.notes.filter((n) => n.beat > beatsFit).length;
+  const outside = unroll(main).filter((n) => n.beat > beatsFit).length;
 
   useEffect(() => {
     if (!message) return;
@@ -131,7 +133,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
             Pista
           </button>
           <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>
-            Música ({song.notes.length})
+            Música ({main.notes.length})
           </button>
           <button className={tab === 'decor' ? 'active' : ''} onClick={() => setTab('decor')}>
             Decoración
@@ -219,7 +221,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
               <b>{songBeats}</b> beats.
               {outside > 0 && <div className="hint">{outside} nota(s) quedan fuera de la pista: alargala, subí la velocidad o bajá el tempo.</div>}
             </div>
-            <button className="btn ghost danger" disabled={!song.notes.length} onClick={() => confirm('¿Borrar toda la melodía?') && setSong({ notes: [] })}>
+            <button className="btn ghost danger" disabled={!main.notes.length} onClick={() => confirm('¿Borrar toda la melodía?') && setMainNotes([])}>
               Borrar melodía
             </button>
           </>
@@ -251,7 +253,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
           <dd>deshacer / rehacer</dd>
         </dl>
       </aside>
-      {tab === 'music' && <PianoRoll song={song} onChange={(notes) => setSong({ notes })} availableBeats={beatsFit} noteLength={noteLength} />}
+      {tab === 'music' && <PianoRoll song={song} notes={main.notes} onChange={setMainNotes} availableBeats={beatsFit} noteLength={noteLength} />}
     </div>
   );
 }

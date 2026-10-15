@@ -61,7 +61,16 @@ usan React normalmente.
     "bpm": 120,
     "timeSignature": [4, 4],
     "designSpeed": 40,
-    "notes": [{ "pitch": 76, "beat": 0, "duration": 0.5 }]
+    "tracks": [
+      {
+        "id": "uuid",
+        "name": "Melodía",
+        "instrument": "marimba",
+        "main": true,
+        "notes": [{ "pitch": 76, "beat": 0, "duration": 0.5 }],
+        "repeats": [{ "start": 0, "end": 4, "times": 2 }]
+      }
+    ]
   },
   "markers": [{ "s": 42.5, "lateral": 0, "noteIndex": 0 }]
 }
@@ -69,6 +78,9 @@ usan React normalmente.
 
 `localStorage` guarda un índice de pistas (`f1s:tracks`) y cada pista por separado
 (`f1s:track:<id>`), para no reescribir todo al guardar una sola.
+
+Las pistas guardadas antes de las pistas múltiples tienen `song.notes`: al cargarlas
+se convierten en una pista principal "Melodía" con instrumento `marimba`.
 
 ## Estéticas y decoración
 

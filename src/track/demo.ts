@@ -59,7 +59,13 @@ export function demoTrack(): TrackData {
       'straight',
       'finish',
     ]),
-    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: odeToJoy() },
+    song: {
+      bpm: 120,
+      beatsPerBar: 4,
+      designSpeed: 30,
+      startOffset: 60,
+      tracks: [{ id: 'melody', name: 'Melodía', instrument: 'marimba', notes: odeToJoy(), repeats: [], main: true }],
+    },
     theme: 'day',
     decorations: {},
   };

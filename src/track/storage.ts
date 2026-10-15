@@ -1,7 +1,7 @@
 import { demoTrack } from './demo';
 import { PIECES } from './pieces';
 import { DEFAULT_THEME } from './themes';
-import type { PieceType, PlacedDecoration, TrackData } from './types';
+import type { PieceType, PlacedDecoration, Repeat, Song, SongNote, SongTrack, TrackData } from './types';
 
 const INDEX_KEY = 'f1s:tracks';
 const trackKey = (id: string) => `f1s:track:${id}`;
@@ -73,10 +73,15 @@ export function newTrack(name = 'Pista nueva'): TrackData {
     name,
     updatedAt: Date.now(),
     pieces: [{ type: 'start', cell: [0, 0, 0], rot: 0 }],
-    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: [] },
+    song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, tracks: [melodyTrack()] },
     theme: DEFAULT_THEME,
     decorations: {},
   };
+}
+
+/** Pista principal por defecto; también es donde van las notas de pistas viejas. */
+export function melodyTrack(notes: SongNote[] = [], id = newId()): SongTrack {
+  return { id, name: 'Melodía', instrument: 'marimba', notes, repeats: [], main: true };
 }
 
 const isCell = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((v) => typeof v === 'number');
@@ -107,14 +112,13 @@ export function validateTrack(data: unknown): TrackData {
     if (!(p.type in PIECES)) throw new Error(`Tramo desconocido: ${String(p.type as PieceType)}`);
     if (!Array.isArray(p.cell) || p.cell.length !== 3 || ![0, 1, 2, 3].includes(p.rot)) throw new Error('Tramo mal formado');
   }
-  const song = t.song ?? newTrack().song;
   return {
     version: 1,
     id: typeof t.id === 'string' ? t.id : newId(),
     name: typeof t.name === 'string' ? t.name : 'Sin nombre',
     updatedAt: typeof t.updatedAt === 'number' ? t.updatedAt : Date.now(),
     pieces: t.pieces,
-    song: { ...newTrack().song, ...song, notes: Array.isArray(song.notes) ? song.notes : [] },
+    song: validateSong(t.song),
     theme: typeof t.theme === 'string' ? t.theme : DEFAULT_THEME,
     decorations: validateDecorations(t.decorations),
   };
@@ -133,4 +137,45 @@ export function exportTrackFile(track: TrackData) {
 export async function importTrackFile(file: File): Promise<TrackData> {
   const track = validateTrack(JSON.parse(await file.text()));
   return saveTrack({ ...track, id: newId() });
+}
+
+const isNote = (n: unknown): n is SongNote => {
+  const v = n as SongNote;
+  return !!v && typeof v.pitch === 'number' && typeof v.beat === 'number' && typeof v.duration === 'number';
+};
+
+/** Descarta repeticiones mal formadas o que se superponen con una anterior. */
+function validateRepeats(data: unknown): Repeat[] {
+  if (!Array.isArray(data)) return [];
+  const valid = data
+    .filter((r: Repeat) => !!r && [r.start, r.end, r.times].every((v) => typeof v === 'number') && r.end > r.start && r.times >= 2)
+    .map((r: Repeat) => ({ start: r.start, end: r.end, times: Math.floor(r.times) }))
+    .sort((a, b) => a.start - b.start);
+  return valid.filter((r, i) => i === 0 || r.start >= valid[i - 1].end);
+}
+
+/**
+ * Normaliza la canción. Las pistas viejas guardaban una sola lista `notes`: se
+ * convierte en la pista principal. Siempre queda exactamente una pista principal.
+ */
+function validateSong(data: unknown): Song {
+  const defaults = newTrack().song;
+  if (!data || typeof data !== 'object') return defaults;
+  const { notes: legacy, tracks: rawTracks, ...rest } = data as Partial<Song> & { notes?: unknown };
+  let tracks: SongTrack[] = Array.isArray(rawTracks)
+    ? rawTracks
+        .filter((t: SongTrack) => !!t && typeof t === 'object')
+        .map((t: SongTrack) => ({
+          ...t,
+          id: typeof t.id === 'string' ? t.id : newId(),
+          name: typeof t.name === 'string' ? t.name : 'Pista',
+          instrument: typeof t.instrument === 'string' ? t.instrument : 'marimba',
+          notes: Array.isArray(t.notes) ? t.notes.filter(isNote) : [],
+          repeats: validateRepeats(t.repeats),
+        }))
+    : [];
+  if (!tracks.length) tracks = [melodyTrack(Array.isArray(legacy) ? legacy.filter(isNote) : [])];
+  const main = Math.max(0, tracks.findIndex((t) => t.main === true));
+  tracks = tracks.map(({ main: _main, ...t }, i) => (i === main ? { ...t, main: true } : t));
+  return { ...defaults, ...rest, tracks };
 }

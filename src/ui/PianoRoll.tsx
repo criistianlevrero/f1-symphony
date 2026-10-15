@@ -12,6 +12,8 @@ const SNAP = 0.25;
 
 interface Props {
   song: Song;
+  /** Notas de la pista que se edita. */
+  notes: SongNote[];
   onChange: (notes: SongNote[]) => void;
   /** Beats que entran en la pista a la velocidad de diseño. */
   availableBeats: number;
@@ -24,7 +26,7 @@ type Drag =
   | null;
 
 /** Piano roll dibujado en canvas: filas = notas, columnas = beats. */
-export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props) {
+export function PianoRoll({ song, notes, onChange, availableBeats, noteLength }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [size, setSize] = useState({ w: 600, h: 260 });
@@ -32,11 +34,11 @@ export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props)
   const [pxPerBeat, setPxPerBeat] = useState(36);
   const [playhead, setPlayhead] = useState<number | null>(null);
   const dragRef = useRef<Drag>(null);
-  const notesRef = useRef(song.notes);
-  notesRef.current = song.notes;
+  const notesRef = useRef(notes);
+  notesRef.current = notes;
   const stopRef = useRef<() => void>(() => {});
 
-  const totalBeats = Math.max(32, Math.ceil(availableBeats) + 4, ...song.notes.map((n) => Math.ceil(n.beat + n.duration) + 8));
+  const totalBeats = Math.max(32, Math.ceil(availableBeats) + 4, ...notes.map((n) => Math.ceil(n.beat + n.duration) + 8));
   const gridH = (HIGH - LOW + 1) * ROW_H;
 
   useEffect(() => {
@@ -101,7 +103,7 @@ export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props)
       ctx.fillText('fin de pista', endX + 4, RULER_H + 12);
     }
     // Notas
-    for (const n of song.notes) {
+    for (const n of notes) {
       const x = xOf(n.beat);
       const y = yOf(n.pitch);
       const w = Math.max(4, n.duration * pxPerBeat - 2);
@@ -142,7 +144,7 @@ export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props)
     ctx.fillStyle = '#151920';
     ctx.fillRect(0, 0, KEYS_W, RULER_H);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [song, size, scroll, pxPerBeat, playhead, availableBeats]);
+  }, [song, notes, size, scroll, pxPerBeat, playhead, availableBeats]);
 
   const audition = (pitch: number) => getSynth().note(pitch, 0.3);
 
@@ -249,8 +251,8 @@ export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props)
     const synth = getSynth();
     const spb = 60 / song.bpm;
     const t0 = synth.now + 0.1;
-    for (const n of song.notes) synth.note(n.pitch, n.duration * spb, t0 + n.beat * spb);
-    const end = Math.max(0, ...song.notes.map((n) => n.beat + n.duration));
+    for (const n of notes) synth.note(n.pitch, n.duration * spb, t0 + n.beat * spb);
+    const end = Math.max(0, ...notes.map((n) => n.beat + n.duration));
     let raf = 0;
     const tick = () => {
       const beat = (synth.now - t0) / spb;
@@ -272,7 +274,7 @@ export function PianoRoll({ song, onChange, availableBeats, noteLength }: Props)
     <div className="pianoroll">
       <div className="pianoroll-bar">
         {playhead === null ? (
-          <button className="btn primary" onClick={play} disabled={!song.notes.length}>
+          <button className="btn primary" onClick={play} disabled={!notes.length}>
             ▶ Escuchar
           </button>
         ) : (

@@ -30,12 +30,32 @@ export interface SongNote {
   duration: number; // en beats
 }
 
+/** Tramo de una pista que suena `times` veces en total (como un signo de repetición). */
+export interface Repeat {
+  start: number; // beat escrito
+  end: number; // beat escrito, exclusivo
+  times: number; // vueltas totales (2 = suena dos veces)
+}
+
+export interface SongTrack {
+  id: string;
+  name: string;
+  /** Id del catálogo de instrumentos. Se guarda tal cual aunque esta versión no lo conozca. */
+  instrument: string;
+  /** En beats escritos: sin desplegar las repeticiones. */
+  notes: SongNote[];
+  repeats: Repeat[];
+  /** La pista del auto: la única que genera marcadores. Hay exactamente una. */
+  main?: boolean;
+  volume?: number;
+}
+
 export interface Song {
   bpm: number;
   beatsPerBar: number;
   designSpeed: number; // m/s
   startOffset: number; // metros desde la largada hasta el beat 0
-  notes: SongNote[];
+  tracks: SongTrack[];
 }
 
 /** Elemento decorativo en la grilla. Solo visual: nunca tiene física. */
