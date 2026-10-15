@@ -229,6 +229,7 @@ export class Game {
     const vertical = rel.dot(f.up);
     if (this.finishSide < 0 && side >= 0 && lateral < ROAD_HALF_WIDTH + 2 && vertical > -2 && vertical < 8) {
       this.telemetry.state = 'finished';
+      this.music?.finish();
     }
     this.finishSide = side;
   }

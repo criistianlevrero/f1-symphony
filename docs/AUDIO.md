@@ -142,11 +142,20 @@ las que terminan. Lo que cambia es **quién marca el beat**:
 
 - **Editor:** un reloj al BPM de la canción. Permite play desde cualquier beat,
   pausa (el cabezal queda donde está) y stop (vuelve al inicio y suelta todo).
-- **Juego:** un *director* que convierte la posición del auto en beat, con el tempo
-  suavizado (pasa-bajos sobre `velocidad / velocidadDeDiseño`), predicción para la
-  ventana de lookahead, y reglas para casos raros: la música solo avanza con el beat
-  máximo alcanzado, y se apaga con un fade si el tempo cae debajo de un mínimo
-  (auto parado, marcha atrás, respawn).
+- **Juego:** el `TempoDirector` convierte la posición del auto en beat:
+  - Mide el tempo como la derivada del beat del jugador sobre el tiempo de
+    simulación (paso fijo de física), con un pasa-bajos de 0,25 s y un tope de 3×
+    el tempo de diseño (para que un salto de posición no lo dispare).
+  - Se ancla en cada paso al tiempo del AudioContext y extrapola como máximo 0,3 s
+    para cubrir la ventana del secuenciador. El ancla es siempre el beat medido:
+    si retuviera lo extrapolado, al frenar quedaría adelantado para siempre.
+  - El acompañamiento se apaga (cada nota con su release) si el tempo cae debajo
+    del 40 % del de diseño, y vuelve por encima del 50 %. Al volver sigue desde lo
+    último programado, sin repetir.
+  - Arranca cuando el auto cruza el beat 0. Al reiniciar la vuelta vuelve a empezar,
+    y al cruzar la llegada se suelta.
+  - La pista principal no la toca el secuenciador: suena con su instrumento cuando
+    el auto toca un marcador, y cada nota dura su figura al tempo actual del jugador.
 
 ## Riesgos conocidos
 
@@ -175,13 +184,16 @@ las que terminan. Lo que cambia es **quién marca el beat**:
 
 ## Etapas
 
-1. Este documento.
-2. Modelo de pistas y repeticiones, migración y `unroll` con tests.
-3. Tone.js, catálogo de instrumentos y `Sequencer`.
-4. Piano roll: transporte (▶ ⏸ ■, espacio, click en la regla), selector de pista e
-   instrumento, pistas de fondo semitransparentes y repeticiones.
-5. Acompañamiento en el juego, siguiendo al director de tempo.
+1. ✅ Este documento.
+2. ✅ Modelo de pistas y repeticiones, migración y `unroll` con tests.
+3. ✅ Tone.js, catálogo de instrumentos y `Sequencer`.
+4. ✅ Piano roll: transporte (▶ ⏸ ■, espacio, click en la regla), selector de pista e
+   instrumento, pistas de fondo semitransparentes, selección y repeticiones.
+5. ✅ Acompañamiento en el juego, siguiendo al director de tempo.
 6. Después: soundfonts (SpessaSynth) e importación de MIDI.
+
+Pendiente conocido: si la pista principal no tiene notas, el juego no crea la
+lógica musical y el acompañamiento tampoco suena.
 
 ## Fuentes
 

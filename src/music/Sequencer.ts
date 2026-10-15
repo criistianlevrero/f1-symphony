@@ -89,6 +89,11 @@ export class Sequencer {
     return this.clock !== null;
   }
 
+  /** Hasta qué beat ya se programó. */
+  get horizonBeat() {
+    return this.horizon;
+  }
+
   /** Beat que está sonando ahora, o null si está detenido. */
   get beat() {
     return this.clock ? this.clock.beatAt(this.deps.now()) : null;
