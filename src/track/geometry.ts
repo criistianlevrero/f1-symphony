@@ -66,19 +66,21 @@ export function buildPieceGeometry(piece: PlacedPiece): THREE.BufferGeometry {
     }
     s += segLen;
   }
-  // Tapas en los extremos para que el bloque se vea cerrado.
-  for (const [f, flip] of [
-    [frames[0], true],
-    [frames[frames.length - 1], false],
+  // Tapas en los extremos para que el bloque se vea cerrado. El perfil no es convexo
+  // (los cordones suben sobre la calzada), así que se triangula en vez de usar un abanico.
+  const capTris = THREE.ShapeUtils.triangulateShape(
+    PROFILE.map(([lat, vert]) => new THREE.Vector2(lat, vert)),
+    [],
+  );
+  const n = new THREE.Vector3();
+  for (const [f, outward] of [
+    [frames[0], -1],
+    [frames[frames.length - 1], 1],
   ] as const) {
-    const center = new THREE.Vector3();
     const pts = PROFILE.map((p) => point(f, p, new THREE.Vector3()));
-    pts.forEach((p) => center.add(p));
-    center.divideScalar(pts.length);
-    for (let k = 0; k < pts.length; k++) {
-      const p0 = pts[k];
-      const p1 = pts[(k + 1) % pts.length];
-      const tri = flip ? [center, p1, p0] : [center, p0, p1];
+    for (const [i, j, k] of capTris) {
+      n.subVectors(pts[j], pts[i]).cross(c.subVectors(pts[k], pts[i]));
+      const tri = n.dot(f.t) * outward >= 0 ? [pts[i], pts[j], pts[k]] : [pts[i], pts[k], pts[j]];
       for (const v of tri) positions.push(v.x, v.y, v.z);
       for (let v = 0; v < 3; v++) colors.push(COLORS.side.r, COLORS.side.g, COLORS.side.b);
     }

@@ -3,7 +3,7 @@ import { frameQuaternion } from '../track/build';
 import { pitchHue } from './theory';
 import type { Marker } from './song';
 
-const crystalGeo = new THREE.OctahedronGeometry(0.85, 0).scale(1, 1.7, 1);
+const crystalGeo = new THREE.OctahedronGeometry(0.425, 0).scale(1, 1.7, 1);
 const ringGeo = new THREE.RingGeometry(2.3, 2.75, 32).rotateX(-Math.PI / 2);
 /** Separación lateral entre notas de un mismo acorde (m). */
 export const CHORD_SPACING = 2.0;

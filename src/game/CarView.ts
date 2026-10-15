@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import type { Car, CarLayout } from './Car';
+import { FRONT_WHEELS, type Car, type CarLayout } from './Car';
 
 // Nombres de las ruedas en el .glb, en el orden de FRONT_WHEELS / REAR_WHEELS.
 const WHEEL_NAMES = ['wheel_FL', 'wheel_FR', 'wheel_RL', 'wheel_RR'];
@@ -70,12 +70,15 @@ export async function loadCarModel(url: string): Promise<CarModel> {
 
   // Collider: caja que cubre carrocería y ruedas en planta; en altura va desde el
   // eje de las ruedas hasta el techo, para no rozar el piso al comprimir la suspensión.
+  // Por delante termina en el borde de las ruedas delanteras: el voladizo de la trompa
+  // (alerón) queda fuera para que no pegue contra el piso al entrar en pendientes fuertes.
   const bodyBox = new THREE.Box3();
   for (const b of body) bodyBox.expandByObject(b);
   allBox.union(bodyBox);
   const axleY = wheelLayout.reduce((sum, w) => sum + w.center.y, 0) / wheelLayout.length;
   const min = new THREE.Vector3(allBox.min.x, axleY, allBox.min.z);
-  const max = new THREE.Vector3(allBox.max.x, bodyBox.max.y, allBox.max.z);
+  const frontX = Math.max(...FRONT_WHEELS.map((i) => wheelLayout[i].center.x + wheelLayout[i].radius));
+  const max = new THREE.Vector3(frontX, bodyBox.max.y, allBox.max.z);
 
   return {
     body,
