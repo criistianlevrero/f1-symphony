@@ -12,7 +12,7 @@ con la mayor precisión rítmica posible.
 | Plataforma | Navegador de escritorio con teclado. Mobile en una fase posterior. |
 | Stack | TypeScript + Vite + Three.js + Rapier (`@dimforge/rapier3d-compat`) |
 | UI | React solo para menús, editor y HUD. El loop del juego es TypeScript plano, fuera de React. |
-| Audio | Web Audio API (posiblemente Tone.js para sintetizar y programar notas) |
+| Audio | Web Audio API + Tone.js; pistas de acompañamiento sintetizadas que siguen el tempo del auto (ver [AUDIO.md](./AUDIO.md)) |
 | Persistencia | `localStorage` con JSON versionado, más exportar/importar a archivo |
 | Ingreso de melodía | Piano roll en el editor. MIDI u otros métodos, más adelante. |
 | Puntaje | Ritmo relativo (opción C), con bonus por ir al tempo original |
@@ -105,6 +105,8 @@ en los cordones y se suma a la emisión.
   con grilla según el compás.
 - Se definen BPM, compás y una **velocidad de diseño** (m/s).
 - Reproducción de prueba dentro del editor.
+- Varias pistas con instrumento propio y repeticiones por pista; una es la principal
+  (la del auto). Ver [AUDIO.md](./AUDIO.md).
 
 ### Colocación automática
 
