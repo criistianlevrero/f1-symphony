@@ -1,6 +1,7 @@
 import { demoTrack } from './demo';
 import { PIECES } from './pieces';
-import type { PieceType, TrackData } from './types';
+import { DEFAULT_THEME } from './themes';
+import type { PieceType, PlacedDecoration, TrackData } from './types';
 
 const INDEX_KEY = 'f1s:tracks';
 const trackKey = (id: string) => `f1s:track:${id}`;
@@ -73,7 +74,27 @@ export function newTrack(name = 'Pista nueva'): TrackData {
     updatedAt: Date.now(),
     pieces: [{ type: 'start', cell: [0, 0, 0], rot: 0 }],
     song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: [] },
+    theme: DEFAULT_THEME,
+    decorations: {},
   };
+}
+
+const isCell = (c: unknown) => Array.isArray(c) && c.length === 3 && c.every((v) => typeof v === 'number');
+
+/**
+ * Conserva la decoración de todas las estéticas, aunque no existan en esta versión
+ * o usen assets desconocidos. Solo descarta elementos mal formados.
+ */
+function validateDecorations(data: unknown): Record<string, PlacedDecoration[]> {
+  const out: Record<string, PlacedDecoration[]> = {};
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return out;
+  for (const [theme, list] of Object.entries(data)) {
+    if (!Array.isArray(list)) continue;
+    out[theme] = list.filter(
+      (d): d is PlacedDecoration => !!d && typeof d.asset === 'string' && isCell(d.cell) && [0, 1, 2, 3].includes(d.rot),
+    );
+  }
+  return out;
 }
 
 /** Valida (por arriba) un JSON de pista. Lanza un error legible si no sirve. */
@@ -94,6 +115,8 @@ export function validateTrack(data: unknown): TrackData {
     updatedAt: typeof t.updatedAt === 'number' ? t.updatedAt : Date.now(),
     pieces: t.pieces,
     song: { ...newTrack().song, ...song, notes: Array.isArray(song.notes) ? song.notes : [] },
+    theme: typeof t.theme === 'string' ? t.theme : DEFAULT_THEME,
+    decorations: validateDecorations(t.decorations),
   };
 }
 

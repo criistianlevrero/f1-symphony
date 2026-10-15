@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { createEnvironment } from '../game/environment';
-import { buildGate, buildPieceGeometry } from '../track/geometry';
+import { createEnvironment, type Environment } from '../game/environment';
+import { buildGate, buildPieceGeometry, makeRoadMaterial } from '../track/geometry';
 import { chainPieces, exitConnector, headingDir, pieceFrames } from '../track/layout';
 import { CELL, LEVEL } from '../track/pieces';
+import { getTheme, type Theme } from '../track/themes';
 import type { Heading, PieceType, PlacedPiece, Song } from '../track/types';
 import { TrackPath } from '../track/TrackPath';
 import { MarkerView } from '../music/MarkerView';
@@ -59,14 +60,16 @@ export class Editor {
   private pieceMeshes: THREE.Mesh[] = [];
   private ghost = new THREE.Group();
   private cursorMarker: THREE.Mesh;
-  private grid: THREE.GridHelper;
+  private grid!: THREE.GridHelper;
   /** Capa libre para que otras vistas (p. ej. marcadores) dibujen sobre la pista. */
   readonly overlay = new THREE.Group();
   private _inputEnabled = true;
 
-  private roadMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
-  private detachedMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true, transparent: true, opacity: 0.45 });
-  private hoverMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true, emissive: 0x7a1010 });
+  private theme!: Theme;
+  private env: Environment | null = null;
+  private roadMat!: THREE.MeshStandardMaterial;
+  private detachedMat!: THREE.MeshStandardMaterial;
+  private hoverMat!: THREE.MeshStandardMaterial;
   private ghostMat = new THREE.MeshStandardMaterial({ color: 0x4dd88a, transparent: true, opacity: 0.55, depthWrite: false });
   private ghostReplaceMat = new THREE.MeshStandardMaterial({ color: 0xf2c94c, transparent: true, opacity: 0.55, depthWrite: false });
 
@@ -78,6 +81,7 @@ export class Editor {
   constructor(
     private container: HTMLElement,
     pieces: PlacedPiece[],
+    theme: string,
     private events: EditorEvents = {},
   ) {
     this.pieces = structuredClone(pieces);
@@ -87,10 +91,8 @@ export class Editor {
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    const { sun } = createEnvironment(this.scene);
-    sun.castShadow = false;
-    this.grid = new THREE.GridHelper(CELL * 80, 80, 0x2f3d33, 0x3e5244);
-    this.scene.add(this.grid, this.trackGroup, this.ghost, this.overlay);
+    this.applyTheme(theme);
+    this.scene.add(this.trackGroup, this.ghost, this.overlay);
 
     this.cursorMarker = new THREE.Mesh(
       new THREE.CylinderGeometry(1.2, 1.2, 0.3, 20),
@@ -151,6 +153,13 @@ export class Editor {
   setSong(song: Song) {
     this.song = song;
     this.updateMarkers();
+  }
+
+  /** Cambia la estética con la que se dibuja la pista. */
+  setTheme(id: string) {
+    if (getTheme(id) === this.theme) return;
+    this.applyTheme(id);
+    this.rebuild();
   }
 
   setPieceType(type: PieceType) {
@@ -232,6 +241,9 @@ export class Editor {
     this.controls.dispose();
     this.disposeTrackMeshes();
     this.markerView?.dispose();
+    this.env?.dispose();
+    this.grid.dispose();
+    for (const m of [this.roadMat, this.detachedMat, this.hoverMat, this.ghostMat, this.ghostReplaceMat]) m.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }
@@ -275,6 +287,29 @@ export class Editor {
 
   // ---------- Escena ----------
 
+  /** Ambiente, grilla y materiales de la calzada según la estética. No rearma los tramos. */
+  private applyTheme(id: string) {
+    this.theme = getTheme(id);
+    this.env?.dispose();
+    this.env = createEnvironment(this.scene, this.theme);
+    this.env.sun.castShadow = false;
+
+    this.roadMat?.dispose();
+    this.detachedMat?.dispose();
+    this.hoverMat?.dispose();
+    this.roadMat = makeRoadMaterial(this.theme);
+    this.detachedMat = makeRoadMaterial(this.theme, { transparent: true, opacity: 0.45 });
+    this.hoverMat = makeRoadMaterial(this.theme, { emissive: 0x7a1010 });
+
+    if (this.grid) {
+      this.scene.remove(this.grid);
+      this.grid.dispose();
+    }
+    this.grid = new THREE.GridHelper(CELL * 80, 80, this.theme.grid.center, this.theme.grid.lines);
+    this.grid.position.y = this.cursor.cell[1] * LEVEL + 0.02;
+    this.scene.add(this.grid);
+  }
+
   private disposeTrackMeshes() {
     for (const child of [...this.trackGroup.children]) {
       child.traverse((o) => {
@@ -294,12 +329,12 @@ export class Editor {
     this.events.onPathLength?.(this.path?.length ?? 0);
     this.updateMarkers();
     this.pieces.forEach((piece, i) => {
-      const mesh = new THREE.Mesh(buildPieceGeometry(piece), inRoute.has(i) ? this.roadMat : this.detachedMat);
+      const mesh = new THREE.Mesh(buildPieceGeometry(piece, this.theme.road), inRoute.has(i) ? this.roadMat : this.detachedMat);
       mesh.userData.index = i;
       mesh.userData.baseMat = mesh.material;
       this.pieceMeshes.push(mesh);
       this.trackGroup.add(mesh);
-      if (piece.type === 'start' || piece.type === 'finish') this.trackGroup.add(buildGate(pieceFrames(piece)[0], piece.type));
+      if (piece.type === 'start' || piece.type === 'finish') this.trackGroup.add(buildGate(pieceFrames(piece)[0], piece.type, this.theme.road));
     });
     this.hovered = -1;
     this.updateGhost();
@@ -323,7 +358,7 @@ export class Editor {
     }
     const piece: PlacedPiece = { type: this.type, cell: this.cursor.cell, rot: this.cursor.rot };
     const replacing = this.pieces.some((p) => sameCell(p.cell, piece.cell));
-    const geo = buildPieceGeometry(piece);
+    const geo = buildPieceGeometry(piece, this.theme.road);
     geo.deleteAttribute('color');
     const mesh = new THREE.Mesh(geo, replacing ? this.ghostReplaceMat : this.ghostMat);
     mesh.position.y = 0.05;

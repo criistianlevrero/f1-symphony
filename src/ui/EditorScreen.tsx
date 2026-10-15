@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Editor, type EditorCursor } from '../editor/Editor';
 import { PIECE_ORDER, PIECES } from '../track/pieces';
 import { exportTrackFile, saveTrack } from '../track/storage';
+import { isThemeId, THEME_ORDER, THEMES } from '../track/themes';
 import type { PieceType, Song, TrackData } from '../track/types';
 import { availableBeats, songLengthBeats } from '../music/song';
 import { PianoRoll } from './PianoRoll';
@@ -48,12 +49,12 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   const [type, setType] = useState<PieceType>('straight');
   const [cursor, setCursor] = useState<EditorCursor | null>(null);
   const [message, setMessage] = useState('');
-  const [tab, setTab] = useState<'track' | 'music'>('track');
+  const [tab, setTab] = useState<'track' | 'music' | 'decor'>('track');
   const [pathLength, setPathLength] = useState(0);
   const [noteLength, setNoteLength] = useState(1);
 
   useEffect(() => {
-    const editor = new Editor(containerRef.current!, trackRef.current.pieces, {
+    const editor = new Editor(containerRef.current!, trackRef.current.pieces, trackRef.current.theme, {
       onChange: (pieces) => onChange({ ...trackRef.current, pieces }, true),
       onCursor: setCursor,
       onPathLength: setPathLength,
@@ -70,6 +71,7 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
 
   useEffect(() => editorRef.current?.setPieceType(type), [type]);
   useEffect(() => editorRef.current?.setSong(track.song), [track.song]);
+  useEffect(() => editorRef.current?.setTheme(track.theme), [track.theme]);
   useEffect(() => {
     if (editorRef.current) editorRef.current.inputEnabled = tab === 'track';
   }, [tab]);
@@ -131,9 +133,27 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
           <button className={tab === 'music' ? 'active' : ''} onClick={() => setTab('music')}>
             Música ({song.notes.length})
           </button>
+          <button className={tab === 'decor' ? 'active' : ''} onClick={() => setTab('decor')}>
+            Decoración
+          </button>
         </div>
 
-        {tab === 'track' ? (
+        {tab === 'decor' ? (
+          <>
+            <label className="field">
+              Estética
+              <select value={track.theme} onChange={(e) => onChange({ ...track, theme: e.target.value }, true)}>
+                {THEME_ORDER.map((id) => (
+                  <option key={id} value={id}>
+                    {THEMES[id].label}
+                  </option>
+                ))}
+                {!isThemeId(track.theme) && <option value={track.theme}>{track.theme} (no disponible, se ve como Día)</option>}
+              </select>
+              <small>Cada estética guarda su propia decoración: al cambiar de estética, la de las otras se conserva.</small>
+            </label>
+          </>
+        ) : tab === 'track' ? (
           <>
             <h3>Tramos</h3>
             <div className="palette">

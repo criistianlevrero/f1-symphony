@@ -38,6 +38,13 @@ export interface Song {
   notes: SongNote[];
 }
 
+/** Elemento decorativo en la grilla. Solo visual: nunca tiene física. */
+export interface PlacedDecoration {
+  asset: string;
+  cell: [number, number, number];
+  rot: Heading;
+}
+
 export interface TrackData {
   version: 1;
   id: string;
@@ -45,4 +52,11 @@ export interface TrackData {
   updatedAt: number;
   pieces: PlacedPiece[];
   song: Song;
+  /** Estética elegida. Se guarda tal cual aunque esta versión no la conozca. */
+  theme: string;
+  /**
+   * Decoración por estética. Solo se dibuja la de `theme`; las demás se conservan
+   * para que cambiar de estética no borre lo ubicado.
+   */
+  decorations: Record<string, PlacedDecoration[]>;
 }

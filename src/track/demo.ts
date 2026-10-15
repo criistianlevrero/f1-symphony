@@ -60,5 +60,7 @@ export function demoTrack(): TrackData {
       'finish',
     ]),
     song: { bpm: 120, beatsPerBar: 4, designSpeed: 30, startOffset: 60, notes: odeToJoy() },
+    theme: 'day',
+    decorations: {},
   };
 }

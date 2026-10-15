@@ -8,6 +8,7 @@ import { Keyboard } from './input';
 import { addGround, addTrackColliders } from './trackPhysics';
 import { carTuning } from './tuning';
 import { buildTrack, type BuiltTrack } from '../track/build';
+import { getTheme } from '../track/themes';
 import type { TrackData } from '../track/types';
 import { ROAD_HALF_WIDTH } from '../track/pieces';
 import { MusicRun } from '../music/MusicRun';
@@ -56,6 +57,7 @@ export class Game {
   private camera = new THREE.PerspectiveCamera(68, 1, 0.1, 3000);
   private chase = new ChaseCamera(this.camera);
   private sun!: THREE.DirectionalLight;
+  private sunOffset = new THREE.Vector3();
   private keyboard = new Keyboard();
   private world!: RAPIER.World;
   private car!: Car;
@@ -112,7 +114,9 @@ export class Game {
   }
 
   private setupScene(carModel: CarModel, trackData: TrackData) {
-    this.sun = createEnvironment(this.scene).sun;
+    const theme = getTheme(trackData.theme);
+    this.sun = createEnvironment(this.scene, theme).sun;
+    this.sunOffset.set(...theme.sun.position);
 
     this.world = new RAPIER.World({ x: 0, y: carTuning.gravity, z: 0 });
     this.world.timestep = FIXED_DT;
@@ -245,8 +249,10 @@ export class Game {
     this.chase.update(this.renderPos, this.renderRot, speed, this.car.tuning.topSpeed, frameDt);
 
     // La sombra sigue al auto.
-    this.sun.position.set(this.renderPos.x + 60, this.renderPos.y + 120, this.renderPos.z + 40);
-    this.sun.target.position.copy(this.renderPos);
+    if (this.sun.castShadow) {
+      this.sun.position.copy(this.renderPos).add(this.sunOffset);
+      this.sun.target.position.copy(this.renderPos);
+    }
 
     this.renderer.render(this.scene, this.camera);
 

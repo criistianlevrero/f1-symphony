@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { pieceFrames, type Frame } from './layout';
 import { ROAD_HALF_WIDTH, ROAD_THICKNESS } from './pieces';
+import type { RoadPalette, Theme } from './themes';
 import type { PlacedPiece } from './types';
 
 const W = ROAD_HALF_WIDTH;
@@ -19,30 +20,40 @@ const PROFILE: [number, number][] = [
   [W, -T],
 ];
 
-const COLORS = {
-  road: new THREE.Color(0x2c3038),
-  curbA: new THREE.Color(0xe03a3a),
-  curbB: new THREE.Color(0xf2f2f2),
-  side: new THREE.Color(0x6c7689),
-  bottom: new THREE.Color(0x4a5163),
-};
+type StripColors = Record<Exclude<keyof RoadPalette, 'pillar'>, THREE.Color>;
+
+const stripColors = (p: RoadPalette): StripColors => ({
+  road: new THREE.Color(p.road),
+  curbA: new THREE.Color(p.curbA),
+  curbB: new THREE.Color(p.curbB),
+  side: new THREE.Color(p.side),
+  bottom: new THREE.Color(p.bottom),
+});
+
+const isCurb = (strip: number) => strip === 1 || strip === 3;
 
 // Color de cada franja del perfil (franja i va de PROFILE[i] a PROFILE[i+1]; la última cierra).
-function stripColor(strip: number, s: number) {
-  if (strip === 1 || strip === 3) return Math.floor(s / CURB_PERIOD) % 2 ? COLORS.curbA : COLORS.curbB;
-  if (strip === 2) return COLORS.road;
-  if (strip === 5) return COLORS.bottom;
-  return COLORS.side;
+function stripColor(colors: StripColors, strip: number, s: number) {
+  if (isCurb(strip)) return Math.floor(s / CURB_PERIOD) % 2 ? colors.curbA : colors.curbB;
+  if (strip === 2) return colors.road;
+  if (strip === 5) return colors.bottom;
+  return colors.side;
 }
 
 const point = (f: Frame, [lat, vert]: [number, number], target: THREE.Vector3) =>
   target.copy(f.p).addScaledVector(f.right, lat).addScaledVector(f.up, vert);
 
-/** Malla de la calzada de un tramo (no indexada, con colores por vértice). */
-export function buildPieceGeometry(piece: PlacedPiece): THREE.BufferGeometry {
+/**
+ * Malla de la calzada de un tramo (no indexada, con colores por vértice y un atributo
+ * `glow` que marca los cordones). La paleta solo cambia colores: las posiciones, que
+ * también usa la física, no dependen de la estética.
+ */
+export function buildPieceGeometry(piece: PlacedPiece, palette: RoadPalette): THREE.BufferGeometry {
+  const tint = stripColors(palette);
   const frames = pieceFrames(piece);
   const positions: number[] = [];
   const colors: number[] = [];
+  const glow: number[] = [];
   const a = new THREE.Vector3();
   const b = new THREE.Vector3();
   const c = new THREE.Vector3();
@@ -61,8 +72,11 @@ export function buildPieceGeometry(piece: PlacedPiece): THREE.BufferGeometry {
       point(f1, p1, c);
       point(f1, p0, d);
       positions.push(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, a.x, a.y, a.z, c.x, c.y, c.z, d.x, d.y, d.z);
-      const col = stripColor(k, s + segLen / 2);
-      for (let v = 0; v < 6; v++) colors.push(col.r, col.g, col.b);
+      const col = stripColor(tint, k, s + segLen / 2);
+      for (let v = 0; v < 6; v++) {
+        colors.push(col.r, col.g, col.b);
+        glow.push(isCurb(k) ? 1 : 0);
+      }
     }
     s += segLen;
   }
@@ -82,21 +96,47 @@ export function buildPieceGeometry(piece: PlacedPiece): THREE.BufferGeometry {
       n.subVectors(pts[j], pts[i]).cross(c.subVectors(pts[k], pts[i]));
       const tri = n.dot(f.t) * outward >= 0 ? [pts[i], pts[j], pts[k]] : [pts[i], pts[k], pts[j]];
       for (const v of tri) positions.push(v.x, v.y, v.z);
-      for (let v = 0; v < 3; v++) colors.push(COLORS.side.r, COLORS.side.g, COLORS.side.b);
+      for (let v = 0; v < 3; v++) {
+        colors.push(tint.side.r, tint.side.g, tint.side.b);
+        glow.push(0);
+      }
     }
   }
 
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+  geo.setAttribute('glow', new THREE.Float32BufferAttribute(glow, 1));
   geo.computeVertexNormals();
   return geo;
 }
 
+/**
+ * Material de la calzada. Si la estética tiene brillo de cordones, se parchea el shader
+ * estándar para sumar `color × glow × curbGlow` a la emisión, así brillan solo los
+ * cordones sin separar la malla en dos materiales.
+ */
+export function makeRoadMaterial(theme: Theme, params: THREE.MeshStandardMaterialParameters = {}) {
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true, ...params });
+  if (theme.curbGlow > 0) {
+    mat.onBeforeCompile = (shader) => {
+      shader.uniforms.curbGlow = { value: theme.curbGlow };
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;')
+        .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
+      shader.fragmentShader = shader.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform float curbGlow;\nvarying float vGlow;')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * curbGlow;');
+    };
+    mat.customProgramCacheKey = () => 'road-glow';
+  }
+  return mat;
+}
+
 /** Arco de largada o llegada sobre la entrada del tramo. */
-export function buildGate(frame: Frame, kind: 'start' | 'finish'): THREE.Group {
+export function buildGate(frame: Frame, kind: 'start' | 'finish', palette: RoadPalette): THREE.Group {
   const g = new THREE.Group();
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x20242c, flatShading: true });
+  const pillarMat = new THREE.MeshStandardMaterial({ color: palette.pillar, flatShading: true });
   const bannerMat =
     kind === 'start'
       ? new THREE.MeshStandardMaterial({ color: 0x2bb673, emissive: 0x0d4a2a, flatShading: true })

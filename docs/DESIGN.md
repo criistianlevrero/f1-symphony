@@ -55,6 +55,8 @@ usan React normalmente.
   "id": "uuid",
   "name": "Für Elise",
   "pieces": [{ "type": "straight", "cell": [0, 0, 0], "rot": 0 }],
+  "theme": "abyss",
+  "decorations": { "abyss": [{ "asset": "calamar", "cell": [2, 0, 1], "rot": 0 }] },
   "song": {
     "bpm": 120,
     "timeSignature": [4, 4],
@@ -67,6 +69,26 @@ usan React normalmente.
 
 `localStorage` guarda un índice de pistas (`f1s:tracks`) y cada pista por separado
 (`f1s:track:<id>`), para no reescribir todo al guardar una sola.
+
+## Estéticas y decoración
+
+Cada pista elige una **estética** (`theme`), definida en `src/track/themes.ts`: cielo,
+niebla, luces, piso, grilla del editor y paleta de la calzada. Hoy hay dos: **Día** y
+**Abismo** (noche con cordones de neón). El brillo de los cordones se logra parcheando
+el shader estándar (`makeRoadMaterial`): la malla lleva un atributo `glow` que vale 1
+en los cordones y se suma a la emisión.
+
+- **La estética y la decoración nunca alteran la física.** La estética solo cambia
+  colores y materiales; las posiciones de la malla (que también usa el collider) no
+  dependen de ella. La decoración es solo visual y nunca llega a `addTrackColliders`.
+  Así el puntaje no depende de cómo se vea la pista.
+- **La decoración se guarda por estética** (`decorations: { [theme]: [...] }`), ubicada
+  en la grilla. Solo se dibuja la de la estética activa; cambiar de estética no borra
+  la de las otras.
+- Una estética o un asset que esta versión no conoce se **conserva** al cargar y guardar;
+  la estética desconocida se dibuja como Día.
+- A futuro, los tramos cargados desde `.glb` (con física) van a necesitar separar la
+  malla visual de la geometría de colisión en `buildTrack`. Hoy son la misma.
 
 ## Melodía y marcadores
 

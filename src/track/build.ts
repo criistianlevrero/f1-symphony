@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { buildGate, buildPieceGeometry } from './geometry';
+import { buildGate, buildPieceGeometry, makeRoadMaterial } from './geometry';
 import { chainPieces, exitConnector, headingDir, pieceFrames, type Frame } from './layout';
+import { getTheme } from './themes';
 import { TrackPath } from './TrackPath';
 import type { Heading, PieceType, PlacedPiece, TrackData } from './types';
 
@@ -18,8 +19,6 @@ export interface BuiltTrack {
   minY: number;
 }
 
-const roadMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true });
-
 export function frameQuaternion(f: Frame, target = new THREE.Quaternion()) {
   return target.setFromRotationMatrix(new THREE.Matrix4().makeBasis(f.t, f.up, f.right));
 }
@@ -29,9 +28,11 @@ export function buildTrack(track: TrackData): BuiltTrack {
   const group = new THREE.Group();
   const geometries: THREE.BufferGeometry[] = [];
   let minY = 0;
+  const theme = getTheme(track.theme);
+  const roadMaterial = makeRoadMaterial(theme);
 
   for (const piece of track.pieces) {
-    const geo = buildPieceGeometry(piece);
+    const geo = buildPieceGeometry(piece, theme.road);
     geometries.push(geo);
     geo.computeBoundingBox();
     minY = Math.min(minY, geo.boundingBox!.min.y);
@@ -39,7 +40,7 @@ export function buildTrack(track: TrackData): BuiltTrack {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     group.add(mesh);
-    if (piece.type === 'start' || piece.type === 'finish') group.add(buildGate(pieceFrames(piece)[0], piece.type));
+    if (piece.type === 'start' || piece.type === 'finish') group.add(buildGate(pieceFrames(piece)[0], piece.type, theme.road));
   }
 
   const { order } = chainPieces(track.pieces);
