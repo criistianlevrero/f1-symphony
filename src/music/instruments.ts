@@ -26,7 +26,29 @@ export interface InstrumentInfo {
   id: string;
   name: string;
   create(synth: Synth): Instrument;
+  /** Si está, el instrumento solo suena en estas notas: el piano roll muestra estas filas. */
+  rows?: DrumRow[];
 }
+
+type DrumSound = 'kick' | 'snare' | 'hat' | 'openHat' | 'crash';
+
+/** Fila del piano roll de batería: una nota GM principal y sus equivalentes. */
+export interface DrumRow {
+  pitch: number;
+  name: string;
+  sound: DrumSound;
+  /** Otras notas GM que suenan igual (por ejemplo, de un MIDI importado). */
+  aliases: number[];
+}
+
+/** Mapa de percusión General MIDI, de arriba hacia abajo como se ve en el piano roll. */
+export const DRUM_ROWS: DrumRow[] = [
+  { pitch: 49, name: 'Platillo', sound: 'crash', aliases: [57] },
+  { pitch: 46, name: 'Hi-hat abierto', sound: 'openHat', aliases: [] },
+  { pitch: 42, name: 'Hi-hat cerrado', sound: 'hat', aliases: [44] },
+  { pitch: 38, name: 'Caja', sound: 'snare', aliases: [40] },
+  { pitch: 36, name: 'Bombo', sound: 'kick', aliases: [35] },
+];
 
 /** La marimba original de `Synth`, con noteOn/noteOff. */
 function marimba(synth: Synth): Instrument {
@@ -71,8 +93,8 @@ function poly(make: () => PolySynth): (synth: Synth) => Instrument {
 }
 
 /**
- * Batería sintetizada con el mapa de percusión General MIDI. Los golpes no usan
- * noteOff: cada sonido tiene su propia caída. Las notas sin sonido asignado se ignoran.
+ * Batería sintetizada con el mapa de percusión General MIDI (`DRUM_ROWS`). Los golpes
+ * no usan noteOff: cada sonido tiene su propia caída. Las demás notas se ignoran.
  */
 function drumKit(synth: Synth): Instrument {
   const output = synth.ctx.createGain();
@@ -97,17 +119,15 @@ function drumKit(synth: Synth): Instrument {
     last.set(voice, t);
     return t;
   };
-  const hits: Record<number, (when: number, velocity: number) => void> = {
-    35: (w, v) => kick.triggerAttack('C1', at(kick, w), v),
-    36: (w, v) => kick.triggerAttack('C1', at(kick, w), v),
-    38: (w, v) => snare.triggerAttack(at(snare, w), v),
-    40: (w, v) => snare.triggerAttack(at(snare, w), v),
-    42: (w, v) => hat.triggerAttack(300, at(hat, w), v),
-    44: (w, v) => hat.triggerAttack(300, at(hat, w), v),
-    46: (w, v) => openHat.triggerAttack(300, at(openHat, w), v),
-    49: (w, v) => crash.triggerAttack(300, at(crash, w), v),
-    57: (w, v) => crash.triggerAttack(300, at(crash, w), v),
+  const sounds: Record<DrumSound, (when: number, velocity: number) => void> = {
+    kick: (w, v) => kick.triggerAttack('C1', at(kick, w), v),
+    snare: (w, v) => snare.triggerAttack(at(snare, w), v),
+    hat: (w, v) => hat.triggerAttack(300, at(hat, w), v),
+    openHat: (w, v) => openHat.triggerAttack(300, at(openHat, w), v),
+    crash: (w, v) => crash.triggerAttack(300, at(crash, w), v),
   };
+  const hits: Record<number, (when: number, velocity: number) => void> = {};
+  for (const row of DRUM_ROWS) for (const pitch of [row.pitch, ...row.aliases]) hits[pitch] = sounds[row.sound];
   return {
     output,
     noteOn: (pitch, velocity, when) => hits[pitch]?.(when, velocity),
@@ -165,7 +185,7 @@ export const INSTRUMENTS: InstrumentInfo[] = [
       return ps;
     }),
   },
-  { id: 'drums:kit', name: 'Batería', create: drumKit },
+  { id: 'drums:kit', name: 'Batería', create: drumKit, rows: DRUM_ROWS },
 ];
 
 /** Busca un instrumento del catálogo. Un id desconocido suena como marimba. */

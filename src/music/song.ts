@@ -84,32 +84,27 @@ export function addRepeat(track: SongTrack, r: Repeat): Repeat[] | string {
 }
 
 /**
- * Mueve las notas y repeticiones seleccionadas `dBeat` beats escritos y `dPitch`
- * semitonos. Ajusta el movimiento para que nada quede antes del beat 0 ni fuera de
- * [low, high]. Devuelve null si las repeticiones se superpondrían.
+ * Mueve las notas y repeticiones seleccionadas `dBeat` beats escritos y cambia la
+ * altura de las notas con `movePitch` (el piano roll decide cómo, según sus filas).
+ * Ajusta el movimiento para que nada quede antes del beat 0. Devuelve null si las
+ * repeticiones se superpondrían.
  */
 export function moveSelection(
   track: SongTrack,
   notes: ReadonlySet<number>,
   repeats: ReadonlySet<number>,
   dBeat: number,
-  dPitch: number,
-  low: number,
-  high: number,
+  movePitch: (pitch: number) => number = (p) => p,
 ): SongTrack | null {
   const selNotes = track.notes.filter((_, i) => notes.has(i));
   const selRepeats = track.repeats.filter((_, i) => repeats.has(i));
   const minBeat = Math.min(...selNotes.map((n) => n.beat), ...selRepeats.map((r) => r.start));
   if (Number.isFinite(minBeat)) dBeat = Math.max(dBeat, -minBeat);
-  if (selNotes.length) {
-    dPitch = Math.max(dPitch, low - Math.min(...selNotes.map((n) => n.pitch)));
-    dPitch = Math.min(dPitch, high - Math.max(...selNotes.map((n) => n.pitch)));
-  }
   const moved = track.repeats.map((r, i) => (repeats.has(i) ? { ...r, start: r.start + dBeat, end: r.end + dBeat } : r));
   if (moved.some((a, i) => moved.some((b, j) => i < j && overlaps(a, b)))) return null;
   return {
     ...track,
-    notes: track.notes.map((n, i) => (notes.has(i) ? { ...n, beat: n.beat + dBeat, pitch: n.pitch + dPitch } : n)),
+    notes: track.notes.map((n, i) => (notes.has(i) ? { ...n, beat: n.beat + dBeat, pitch: movePitch(n.pitch) } : n)),
     // Se conserva el orden para que los índices de la selección sigan valiendo.
     repeats: moved,
   };

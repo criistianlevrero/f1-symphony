@@ -127,13 +127,13 @@ describe('moveSelection', () => {
   ]);
 
   it('mueve solo lo seleccionado', () => {
-    const m = moveSelection(t, new Set([1]), new Set(), 1, 2, 48, 84)!;
+    const m = moveSelection(t, new Set([1]), new Set(), 1, (p) => p + 2)!;
     expect(m.notes).toEqual([note(0, 60), note(3, 64), note(4, 64)]);
     expect(m.repeats).toEqual(t.repeats);
   });
 
   it('mueve notas y repeticiones juntas (Ctrl+A)', () => {
-    const m = moveSelection(t, new Set([0, 1, 2]), new Set([0, 1]), 4, 0, 48, 84)!;
+    const m = moveSelection(t, new Set([0, 1, 2]), new Set([0, 1]), 4)!;
     expect(m.notes.map((n) => n.beat)).toEqual([4, 6, 8]);
     expect(m.repeats).toEqual([
       { start: 4, end: 8, times: 2 },
@@ -141,16 +141,12 @@ describe('moveSelection', () => {
     ]);
   });
 
-  it('no deja nada antes del beat 0 ni fuera del rango de alturas', () => {
-    const m = moveSelection(t, new Set([1, 2]), new Set(), -10, 30, 48, 84)!;
-    expect(m.notes.map((n) => [n.beat, n.pitch])).toEqual([
-      [0, 60],
-      [0, 82],
-      [2, 84],
-    ]);
+  it('no deja nada antes del beat 0', () => {
+    const m = moveSelection(t, new Set([1, 2]), new Set(), -10)!;
+    expect(m.notes.map((n) => n.beat)).toEqual([0, 0, 2]);
   });
 
   it('rechaza mover una repetición encima de otra', () => {
-    expect(moveSelection(t, new Set(), new Set([0]), 6, 0, 48, 84)).toBeNull();
+    expect(moveSelection(t, new Set(), new Set([0]), 6)).toBeNull();
   });
 });

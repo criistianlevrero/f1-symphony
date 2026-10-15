@@ -71,7 +71,7 @@ interface Instrument {
 ```
 
 Un catálogo asocia ids a fábricas: `synth:lead`, `synth:bass`, `synth:pad`,
-`synth:pluck`, `drums:kit`, `marimba` (el sintetizador original) y, más adelante,
+`synth:pluck`, `drums:kit` (mapa GM: 36 bombo, 38 caja, 42 hi-hat cerrado, 46 abierto, 49 platillo), `marimba` (el sintetizador original) y, más adelante,
 `gm:<programa>`.
 
 ### Pistas
@@ -123,6 +123,12 @@ interface Repeat {
 - Barra de pista: selector (★ = principal), nombre, instrumento, volumen, hacer
   principal, agregar y borrar (la principal no se borra).
 - Se edita la pista seleccionada; las demás se dibujan detrás, semitransparentes.
+- **Filas según el instrumento:** los melódicos muestran el teclado de C3 a C6. La
+  batería muestra solo sus sonidos con nombre (Platillo, Hi-hat abierto, Hi-hat
+  cerrado, Caja, Bombo), tomados de `DRUM_ROWS` en `instruments.ts`, que también
+  define qué suena. Las notas GM equivalentes (35, 40, 44, 57, por ejemplo de un
+  MIDI) se dibujan en la fila de su sonido. Mover en vertical va de fila en fila.
+  Si una pista tiene notas sin fila (al cambiar de instrumento), la barra lo avisa.
 - **Selección:** click selecciona una nota; arrastrar una nota seleccionada mueve toda
   la selección. Ctrl+click suma o quita; Ctrl+arrastrar en vacío selecciona por
   rectángulo. Ctrl+A selecciona todas las notas **y las repeticiones** de la pista,
