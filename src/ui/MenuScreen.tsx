@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { deleteTrack, importTrackFile, listTracks, loadTrack, newId, newTrack, saveTrack } from '../track/storage';
 import type { TrackData } from '../track/types';
+import { CheckeredFlagBackground } from './CheckeredFlagBackground';
 
 interface Props {
   onPlay: (track: TrackData) => void;
@@ -39,6 +40,7 @@ export function MenuScreen({ onPlay, onEdit }: Props) {
 
   return (
     <div className="screen menu">
+      <CheckeredFlagBackground />
       <div className="menu-card">
         <h1>
           F1 <span>Symphony</span>
