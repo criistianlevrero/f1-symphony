@@ -26,6 +26,10 @@ export interface Theme {
   road: RoadPalette;
   /** Brillo propio de los cordones (0 = sin brillo). */
   curbGlow: number;
+  /** Cuánto pulsa el brillo de los cordones con el beat (0 = fijo, 1 = máximo). */
+  curbPulse: number;
+  /** Resplandor alrededor de lo que brilla. Sin bloom se dibuja directo, sin posprocesado. */
+  bloom?: { strength: number; radius: number; threshold: number };
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -40,6 +44,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     grid: { center: 0x2f3d33, lines: 0x3e5244 },
     road: { road: 0x2c3038, curbA: 0xe03a3a, curbB: 0xf2f2f2, side: 0x6c7689, bottom: 0x4a5163, pillar: 0x20242c },
     curbGlow: 0,
+    curbPulse: 0,
   },
   abyss: {
     id: 'abyss',
@@ -52,6 +57,8 @@ export const THEMES: Record<ThemeId, Theme> = {
     grid: { center: 0x1e6a8a, lines: 0x0c2a3a },
     road: { road: 0x0a0e18, curbA: 0x00e5ff, curbB: 0xff2bd6, side: 0x141a2e, bottom: 0x080b14, pillar: 0x0a0e18 },
     curbGlow: 1.2,
+    curbPulse: 0.7,
+    bloom: { strength: 0.3, radius: 0.2, threshold: 0.15 },
   },
 };
 

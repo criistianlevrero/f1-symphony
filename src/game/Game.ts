@@ -4,14 +4,17 @@ import { Car } from './Car';
 import { CarView, loadCarModel, type CarModel } from './CarView';
 import { ChaseCamera } from './ChaseCamera';
 import { createEnvironment } from './environment';
+import { createRenderPipeline, type RenderPipeline } from './renderPipeline';
 import { Keyboard } from './input';
 import { addGround, addTrackColliders } from './trackPhysics';
 import { carTuning } from './tuning';
 import { buildTrack, type BuiltTrack } from '../track/build';
+import { setRoadBeat } from '../track/geometry';
 import { getTheme } from '../track/themes';
-import type { TrackData } from '../track/types';
+import type { Song, TrackData } from '../track/types';
 import { ROAD_HALF_WIDTH } from '../track/pieces';
 import { MusicRun } from '../music/MusicRun';
+import { distanceToBeat } from '../music/song';
 
 const FIXED_DT = 1 / 60;
 const MAX_STEPS_PER_FRAME = 5;
@@ -53,6 +56,7 @@ export class Game {
   };
 
   private renderer: THREE.WebGLRenderer;
+  private pipeline: RenderPipeline | null = null;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(68, 1, 0.1, 3000);
   private chase = new ChaseCamera(this.camera);
@@ -63,6 +67,7 @@ export class Game {
   private car!: Car;
   private carView!: CarView;
   private track!: BuiltTrack;
+  private song!: Song;
   /** Marcadores, sonido y puntaje; null si la pista no tiene melodía. */
   music: MusicRun | null = null;
 
@@ -117,6 +122,9 @@ export class Game {
     const theme = getTheme(trackData.theme);
     this.sun = createEnvironment(this.scene, theme).sun;
     this.sunOffset.set(...theme.sun.position);
+    this.pipeline = createRenderPipeline(this.renderer, this.scene, this.camera, theme);
+    this.resize();
+    this.song = trackData.song;
 
     this.world = new RAPIER.World({ x: 0, y: carTuning.gravity, z: 0 });
     this.world.timestep = FIXED_DT;
@@ -254,7 +262,9 @@ export class Game {
       this.sun.target.position.copy(this.renderPos);
     }
 
-    this.renderer.render(this.scene, this.camera);
+    // Los cordones pulsan con el beat del jugador (su posición en la pista).
+    setRoadBeat(this.track.roadMaterial, distanceToBeat(this.song, this.telemetry.progress));
+    this.pipeline!.render();
 
     this.telemetry.speedKmh = this.car.forwardSpeed * 3.6;
     this.telemetry.wheelsOnGround = this.car.wheelsOnGround;
@@ -271,6 +281,7 @@ export class Game {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.pipeline?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -284,6 +295,7 @@ export class Game {
     this.music?.dispose();
     this.world.free();
     this.track.geometries.forEach((g) => g.dispose());
+    this.pipeline?.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();
   }

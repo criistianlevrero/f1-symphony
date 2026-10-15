@@ -1,14 +1,15 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnvironment, type Environment } from '../game/environment';
-import { buildGate, buildPieceGeometry, makeRoadMaterial } from '../track/geometry';
+import { createRenderPipeline, type RenderPipeline } from '../game/renderPipeline';
+import { buildGate, buildPieceGeometry, makeRoadMaterial, setRoadBeat } from '../track/geometry';
 import { chainPieces, exitConnector, headingDir, pieceFrames } from '../track/layout';
 import { CELL, LEVEL } from '../track/pieces';
 import { getTheme, type Theme } from '../track/themes';
 import type { Heading, PieceType, PlacedPiece, Song } from '../track/types';
 import { TrackPath } from '../track/TrackPath';
 import { MarkerView } from '../music/MarkerView';
-import { computeMarkers } from '../music/song';
+import { computeMarkers, secondsPerBeat } from '../music/song';
 
 const MAX_LEVEL = 12;
 const MAX_HISTORY = 200;
@@ -39,6 +40,7 @@ const isTyping = (e: KeyboardEvent) => {
  */
 export class Editor {
   private renderer: THREE.WebGLRenderer;
+  private pipeline: RenderPipeline | null = null;
   private scene = new THREE.Scene();
   private camera = new THREE.PerspectiveCamera(55, 1, 0.5, 4000);
   private controls: OrbitControls;
@@ -242,6 +244,7 @@ export class Editor {
     this.disposeTrackMeshes();
     this.markerView?.dispose();
     this.env?.dispose();
+    this.pipeline?.dispose();
     this.grid.dispose();
     for (const m of [this.roadMat, this.detachedMat, this.hoverMat, this.ghostMat, this.ghostReplaceMat]) m.dispose();
     this.renderer.dispose();
@@ -308,6 +311,9 @@ export class Editor {
     this.grid = new THREE.GridHelper(CELL * 80, 80, this.theme.grid.center, this.theme.grid.lines);
     this.grid.position.y = this.cursor.cell[1] * LEVEL + 0.02;
     this.scene.add(this.grid);
+
+    this.pipeline?.dispose();
+    this.pipeline = createRenderPipeline(this.renderer, this.scene, this.camera, this.theme);
   }
 
   private disposeTrackMeshes() {
@@ -448,13 +454,17 @@ export class Editor {
     this.raf = requestAnimationFrame(this.loop);
     this.controls.update();
     this.markerView?.update(1 / 60);
-    this.renderer.render(this.scene, this.camera);
+    // Sin auto, los cordones pulsan con el reloj al tempo de la canción (vista previa).
+    const beat = this.song ? performance.now() / 1000 / secondsPerBeat(this.song) : 0;
+    for (const m of [this.roadMat, this.detachedMat, this.hoverMat]) setRoadBeat(m, beat);
+    this.pipeline!.render();
   };
 
   private resize() {
     const w = this.container.clientWidth || 1;
     const h = this.container.clientHeight || 1;
     this.renderer.setSize(w, h, false);
+    this.pipeline?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }

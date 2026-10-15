@@ -78,6 +78,13 @@ niebla, luces, piso, grilla del editor y paleta de la calzada. Hoy hay dos: **D�
 el shader estándar (`makeRoadMaterial`): la malla lleva un atributo `glow` que vale 1
 en los cordones y se suma a la emisión.
 
+- **Pulso:** con `curbPulse > 0`, el brillo de los cordones destella en cada beat y se
+  apaga hasta el siguiente. En el juego sigue el **beat del jugador** (su posición en
+  la pista, `distanceToBeat`); en el editor, el reloj al tempo de la canción.
+- **Bloom:** las estéticas con `bloom` se dibujan con un `EffectComposer` y
+  `UnrealBloomPass` (`src/game/renderPipeline.ts`). Las que no lo tienen usan el render
+  directo, sin costo extra.
+
 - **La estética y la decoración nunca alteran la física.** La estética solo cambia
   colores y materiales; las posiciones de la malla (que también usa el collider) no
   dependen de ella. La decoración es solo visual y nunca llega a `addTrackColliders`.

@@ -114,23 +114,43 @@ export function buildPieceGeometry(piece: PlacedPiece, palette: RoadPalette): TH
 /**
  * Material de la calzada. Si la estética tiene brillo de cordones, se parchea el shader
  * estándar para sumar `color × glow × curbGlow` a la emisión, así brillan solo los
- * cordones sin separar la malla en dos materiales.
+ * cordones sin separar la malla en dos materiales. Con `curbPulse`, el brillo destella
+ * en cada beat (ver `setRoadBeat`) y se apaga hasta el siguiente.
  */
 export function makeRoadMaterial(theme: Theme, params: THREE.MeshStandardMaterialParameters = {}) {
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85, flatShading: true, ...params });
   if (theme.curbGlow > 0) {
+    const uniforms = {
+      curbGlow: { value: theme.curbGlow },
+      curbPulse: { value: theme.curbPulse },
+      beat: { value: 0 },
+    };
+    mat.userData.roadUniforms = uniforms;
     mat.onBeforeCompile = (shader) => {
-      shader.uniforms.curbGlow = { value: theme.curbGlow };
+      Object.assign(shader.uniforms, uniforms);
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nattribute float glow;\nvarying float vGlow;')
         .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = glow;');
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float curbGlow;\nvarying float vGlow;')
-        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vColor.rgb * vGlow * curbGlow;');
+        .replace('#include <common>', '#include <common>\nuniform float curbGlow;\nuniform float curbPulse;\nuniform float beat;\nvarying float vGlow;')
+        .replace(
+          '#include <emissivemap_fragment>',
+          [
+            '#include <emissivemap_fragment>',
+            'float flash = 0.5 + 0.9 * exp(-5.0 * fract(beat));',
+            'totalEmissiveRadiance += vColor.rgb * vGlow * curbGlow * mix(1.0, flash, curbPulse);',
+          ].join('\n'),
+        );
     };
     mat.customProgramCacheKey = () => 'road-glow';
   }
   return mat;
+}
+
+/** Fija el beat con el que pulsan los cordones. No hace nada si la estética no brilla. */
+export function setRoadBeat(mat: THREE.Material, beat: number) {
+  const uniforms = mat.userData.roadUniforms as { beat: { value: number } } | undefined;
+  if (uniforms) uniforms.beat.value = beat;
 }
 
 /** Arco de largada o llegada sobre la entrada del tramo. */

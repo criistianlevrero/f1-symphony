@@ -17,6 +17,8 @@ export interface BuiltTrack {
   /** Línea de llegada (entrada del tramo de llegada), si el recorrido la alcanza. */
   finish: Frame | null;
   minY: number;
+  /** Material de la calzada (para hacer pulsar los cordones con `setRoadBeat`). */
+  roadMaterial: THREE.MeshStandardMaterial;
 }
 
 export function frameQuaternion(f: Frame, target = new THREE.Quaternion()) {
@@ -57,7 +59,7 @@ export function buildTrack(track: TrackData): BuiltTrack {
     spawn = { position: f.p.clone().addScaledVector(f.up, 1.2), quaternion: frameQuaternion(f) };
   }
 
-  return { group, geometries, path, order, spawn, finish, minY };
+  return { group, geometries, path, order, spawn, finish, minY, roadMaterial };
 }
 
 /** Agrega un tramo pegado a la salida del último tramo de la lista. */
