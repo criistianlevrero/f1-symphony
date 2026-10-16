@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { getSynth } from '../music/audio';
-import { getInstrument, INSTRUMENTS } from '../music/instruments';
+import { getInstrument } from '../music/instruments';
 import { audioDeps, fixedClock, Sequencer } from '../music/Sequencer';
 import {
   addRepeat,
@@ -15,6 +15,7 @@ import {
 import { isBlackKey, noteName, pitchHue } from '../music/theory';
 import { newId } from '../track/storage';
 import type { Song, SongTrack } from '../track/types';
+import { InstrumentPanel } from './InstrumentPanel';
 
 const LOW = 48; // C3
 const HIGH = 84; // C6
@@ -444,7 +445,8 @@ export function PianoRoll({ song, selectedTrack: track, onSelectTrack, onTracksC
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
     const t = e.target as HTMLElement;
-    if (t.closest('input, select, textarea')) return;
+    // En campos de texto y listas las teclas son del campo; en un deslizador, no.
+    if (t.closest('input:not([type="range"]), select, textarea')) return;
     const ctrl = e.ctrlKey || e.metaKey;
     if (e.code === 'Space') {
       e.preventDefault();
@@ -670,7 +672,6 @@ export function PianoRoll({ song, selectedTrack: track, onSelectTrack, onTracksC
     onSelectTrack(song.tracks.find((t) => t.main)!.id);
   };
   const makeMain = () => onTracksChange(song.tracks.map(({ main: _main, ...t }) => (t.id === track.id ? { ...t, main: true } : t)));
-  const knownInstrument = INSTRUMENTS.some((i) => i.id === track.instrument);
   const hasSound = songLengthBeats(song) > 0;
 
   return (
@@ -695,24 +696,6 @@ export function PianoRoll({ song, selectedTrack: track, onSelectTrack, onTracksC
             ))}
           </select>
           <input className="track-title" value={track.name} onChange={(e) => updateTrack({ ...track, name: e.target.value })} aria-label="Nombre de la pista" />
-          <select value={track.instrument} onChange={(e) => updateTrack({ ...track, instrument: e.target.value })} aria-label="Instrumento">
-            {INSTRUMENTS.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.name}
-              </option>
-            ))}
-            {!knownInstrument && <option value={track.instrument}>{track.instrument} (no disponible)</option>}
-          </select>
-          <input
-            type="range"
-            min={0}
-            max={1.5}
-            step={0.05}
-            value={track.volume ?? 1}
-            onChange={(e) => updateTrack({ ...track, volume: +e.target.value })}
-            title="Volumen"
-            aria-label="Volumen"
-          />
           <button className="btn ghost" onClick={makeMain} disabled={isMain} title="La pista principal es la que toca el auto">
             {isMain ? '★ Principal' : '☆ Hacer principal'}
           </button>
@@ -729,47 +712,50 @@ export function PianoRoll({ song, selectedTrack: track, onSelectTrack, onTracksC
           )}
         </div>
       </div>
-      <div ref={wrapRef} className="pianoroll-canvas">
-        <canvas
-          ref={canvasRef}
-          style={{ width: size.w, height: size.h }}
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onContextMenu={(e) => e.preventDefault()}
-        />
-        {popup && (
-          <div className="repeat-popup" style={{ left: Math.min(Math.max(keysW, popup.x), size.w - 260), top: RULER_H + 4 }}>
-            <span>{popup.label}</span>
-            <label>
-              ×
-              <input
-                type="number"
-                min={2}
-                max={64}
-                value={popup.times}
-                autoFocus
-                onChange={(e) => setPopup({ ...popup, times: +e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') applyPopup();
-                  if (e.key === 'Escape') setPopup(null);
-                }}
-              />
-            </label>
-            <button className="btn primary" onClick={applyPopup}>
-              Aplicar
-            </button>
-            {popup.kind === 'edit' && (
-              <button className="btn ghost danger" onClick={() => removeRepeat(popup.index)}>
-                Quitar
+      <div className="pianoroll-body">
+        <div ref={wrapRef} className="pianoroll-canvas">
+          <canvas
+            ref={canvasRef}
+            style={{ width: size.w, height: size.h }}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+          {popup && (
+            <div className="repeat-popup" style={{ left: Math.min(Math.max(keysW, popup.x), size.w - 260), top: RULER_H + 4 }}>
+              <span>{popup.label}</span>
+              <label>
+                ×
+                <input
+                  type="number"
+                  min={2}
+                  max={64}
+                  value={popup.times}
+                  autoFocus
+                  onChange={(e) => setPopup({ ...popup, times: +e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') applyPopup();
+                    if (e.key === 'Escape') setPopup(null);
+                  }}
+                />
+              </label>
+              <button className="btn primary" onClick={applyPopup}>
+                Aplicar
               </button>
-            )}
-            <button className="btn ghost" onClick={() => setPopup(null)}>
-              ✕
-            </button>
-          </div>
-        )}
-        {message && <div className="pianoroll-toast">{message}</div>}
+              {popup.kind === 'edit' && (
+                <button className="btn ghost danger" onClick={() => removeRepeat(popup.index)}>
+                  Quitar
+                </button>
+              )}
+              <button className="btn ghost" onClick={() => setPopup(null)}>
+                ✕
+              </button>
+            </div>
+          )}
+          {message && <div className="pianoroll-toast">{message}</div>}
+        </div>
+        <InstrumentPanel track={track} onChange={updateTrack} />
       </div>
       <div className="hint-text pianoroll-help">
         Click: agregar / seleccionar · arrastrar: mover la selección / estirar del borde · Ctrl+arrastrar: seleccionar · Ctrl+A: todo · Supr: borrar · click

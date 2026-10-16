@@ -87,4 +87,13 @@ describe('validateTrack: pistas de la canción', () => {
     const t = validateTrack(song({ notes: [{ pitch: 60, beat: 0, duration: 1 }, { pitch: 60 }, null] }));
     expect(t.song.tracks[0].notes).toEqual([{ pitch: 60, beat: 0, duration: 1 }]);
   });
+
+  it('conserva los parámetros de instrumento válidos, aunque no se conozcan', () => {
+    const params = { 'envelope.attack': 0.2, 'oscillator.type': 'fatsquare', 'futuro.param': 3, malo: { x: 1 }, nan: NaN };
+    const t = validateTrack(song({ tracks: [{ id: 'a', name: 'A', instrument: 'synth:lead', notes: [], repeats: [], params }] }));
+    expect(t.song.tracks[0].params).toEqual({ 'envelope.attack': 0.2, 'oscillator.type': 'fatsquare', 'futuro.param': 3 });
+    const sin = validateTrack(song({ tracks: [{ id: 'b', name: 'B', instrument: 'marimba', notes: [], repeats: [] }] }));
+    expect(sin.song.tracks[0].params).toBeUndefined();
+  });
 });
+

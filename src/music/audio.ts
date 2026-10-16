@@ -53,21 +53,23 @@ export class Synth {
 
   /**
    * Arranca una nota de marimba en `when` hacia `dest` y devuelve la función que la
-   * suelta (con una cola de 0,35 s). Si nunca se suelta, se corta a los 30 s.
+   * suelta (con la cola de `release`). Si nunca se suelta, se corta a los 30 s.
+   * `brightness` es el nivel del segundo armónico y `sustain`, el nivel que queda
+   * después del golpe.
    */
-  voice(midi: number, when: number, velocity = 1, dest: AudioNode = this.master) {
+  voice(midi: number, when: number, velocity = 1, dest: AudioNode = this.master, { brightness = 0.35, sustain = 0.18, release = 0.35 } = {}) {
     const t = when;
     const f = midiToFreq(midi);
     const env = this.ctx.createGain();
     env.gain.setValueAtTime(0, t);
     env.gain.linearRampToValueAtTime(0.5 * velocity, t + 0.006);
-    env.gain.exponentialRampToValueAtTime(0.18 * velocity, t + 0.25);
+    env.gain.exponentialRampToValueAtTime(sustain * velocity, t + 0.25);
     env.connect(dest);
     const oscs: OscillatorNode[] = [];
 
     const partials: [OscillatorType, number, number][] = [
       ['triangle', 1, 1],
-      ['sine', 2, 0.35],
+      ['sine', 2, brightness],
       ['sine', 4.01, 0.08],
     ];
     for (const [type, mult, gain] of partials) {
@@ -92,10 +94,10 @@ export class Synth {
       if (env.gain.cancelAndHoldAtTime) env.gain.cancelAndHoldAtTime(r);
       else {
         env.gain.cancelScheduledValues(r);
-        env.gain.setValueAtTime(0.18 * velocity, r);
+        env.gain.setValueAtTime(sustain * velocity, r);
       }
-      env.gain.exponentialRampToValueAtTime(0.0001, r + 0.35);
-      for (const osc of oscs) osc.stop(r + 0.4);
+      env.gain.exponentialRampToValueAtTime(0.0001, r + release);
+      for (const osc of oscs) osc.stop(r + release + 0.05);
     };
   }
 

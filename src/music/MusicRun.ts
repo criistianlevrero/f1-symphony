@@ -81,7 +81,7 @@ export class MusicRun {
     this.spb = secondsPerBeat(song);
     const deps = audioDeps(this.synth);
     const main = mainTrack(song);
-    this.lead = deps.create(main.instrument);
+    this.lead = deps.create(main.instrument, main.params ?? {});
     this.lead.setVolume(main.volume ?? 1);
     this.accompaniment = new Sequencer(deps);
     this.accompaniment.setSong({ ...song, tracks: song.tracks.filter((t) => t !== main) });

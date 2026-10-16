@@ -144,6 +144,13 @@ const isNote = (n: unknown): n is SongNote => {
   return !!v && typeof v.pitch === 'number' && typeof v.beat === 'number' && typeof v.duration === 'number';
 };
 
+/** Conserva los parámetros con valor numérico o de texto; sin ninguno, no hay campo. */
+function validateParams(data: unknown): Record<string, number | string> | undefined {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const entries = Object.entries(data).filter(([, v]) => (typeof v === 'number' && Number.isFinite(v)) || typeof v === 'string');
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 /** Descarta repeticiones mal formadas o que se superponen con una anterior. */
 function validateRepeats(data: unknown): Repeat[] {
   if (!Array.isArray(data)) return [];
@@ -172,6 +179,7 @@ function validateSong(data: unknown): Song {
           instrument: typeof t.instrument === 'string' ? t.instrument : 'marimba',
           notes: Array.isArray(t.notes) ? t.notes.filter(isNote) : [],
           repeats: validateRepeats(t.repeats),
+          params: validateParams(t.params),
         }))
     : [];
   if (!tracks.length) tracks = [melodyTrack(Array.isArray(legacy) ? legacy.filter(isNote) : [])];

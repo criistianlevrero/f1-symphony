@@ -48,6 +48,11 @@ export interface SongTrack {
   /** La pista del auto: la única que genera marcadores. Hay exactamente una. */
   main?: boolean;
   volume?: number;
+  /**
+   * Parámetros del instrumento cambiados respecto del preset (id del parámetro →
+   * valor). Se guardan tal cual aunque esta versión no los conozca.
+   */
+  params?: Record<string, number | string>;
 }
 
 export interface Song {

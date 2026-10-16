@@ -1,6 +1,6 @@
 import type { Song } from '../track/types';
 import type { Synth } from './audio';
-import { getInstrument, type Instrument } from './instruments';
+import { getInstrument, type Instrument, type ParamValues } from './instruments';
 import { unroll } from './song';
 
 /** Cada cuánto se revisa qué programar (ms) y cuánto hacia adelante (s). */
@@ -34,15 +34,15 @@ export interface TrackOutput {
 
 export interface SequencerDeps {
   now(): number;
-  create(instrumentId: string): TrackOutput;
+  create(instrumentId: string, params: ParamValues): TrackOutput;
 }
 
 /** Conecta cada pista al bus principal de `synth` con su propio volumen. */
 export function audioDeps(synth: Synth): SequencerDeps {
   return {
     now: () => synth.now,
-    create(instrumentId) {
-      const instrument = getInstrument(instrumentId).create(synth);
+    create(instrumentId, params) {
+      const instrument = getInstrument(instrumentId).create(synth, params);
       const gain = synth.ctx.createGain();
       instrument.output.connect(gain);
       gain.connect(synth.master);
@@ -66,6 +66,8 @@ interface NoteEvent {
 
 interface Voice {
   instrumentId: string;
+  /** Parámetros aplicados, serializados para detectar cambios. */
+  paramsKey: string;
   out: TrackOutput;
   events: NoteEvent[];
   next: number;
@@ -116,9 +118,14 @@ export class Sequencer {
         v.out.dispose();
         v = undefined;
       }
+      const paramsKey = JSON.stringify(track.params ?? {});
       if (!v) {
-        v = { instrumentId: track.instrument, out: this.deps.create(track.instrument), events: [], next: 0, sounding: [] };
+        v = { instrumentId: track.instrument, paramsKey, out: this.deps.create(track.instrument, track.params ?? {}), events: [], next: 0, sounding: [] };
         this.voices.set(track.id, v);
+      } else if (v.paramsKey !== paramsKey) {
+        // Cambio de parámetros: se aplica al instrumento en vivo, sin recrearlo.
+        v.paramsKey = paramsKey;
+        v.out.instrument.set(track.params ?? {});
       }
       v.out.setVolume(track.volume ?? 1);
       v.events = unroll(track).map((n) => ({ beat: n.beat, end: n.beat + n.duration, pitch: n.pitch }));

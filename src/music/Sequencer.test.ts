@@ -31,6 +31,7 @@ function setup() {
           noteOn: (p, _v, t) => log.push(`${id} on ${p} @${t.toFixed(2)}`),
           noteOff: (p, t) => log.push(`${id} off ${p} @${t.toFixed(2)}`),
           allNotesOff: (t) => log.push(`${id} all-off @${t.toFixed(2)}`),
+          set: (p) => log.push(`${id} set ${JSON.stringify(p)}`),
           dispose: () => log.push(`${id} dispose`),
         },
         setVolume: () => {},
@@ -132,5 +133,14 @@ describe('Sequencer', () => {
     seq.setSong(song(track('a', [note(0)], { instrument: 'synth:pad' })));
     expect(created).toEqual(['marimba', 'synth:pad']);
     expect(log).toContain('marimba out-dispose');
+  });
+
+  it('al cambiar los parámetros de una pista los aplica en vivo, sin recrear el instrumento', () => {
+    const { seq, log, created } = setup();
+    seq.setSong(song(track('a', [note(0)])));
+    seq.setSong(song(track('a', [note(0)], { params: { 'envelope.attack': 0.5 } })));
+    seq.setSong(song(track('a', [note(0), note(1)], { params: { 'envelope.attack': 0.5 } })));
+    expect(created).toEqual(['marimba']);
+    expect(log.filter((l) => l.includes(' set '))).toEqual(['marimba set {"envelope.attack":0.5}']);
   });
 });

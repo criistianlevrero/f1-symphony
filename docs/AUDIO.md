@@ -74,6 +74,30 @@ Un catálogo asocia ids a fábricas: `synth:lead`, `synth:bass`, `synth:pad`,
 `synth:pluck`, `drums:kit` (mapa GM: 36 bombo, 38 caja, 42 hi-hat cerrado, 46 abierto, 49 platillo), `marimba` (el sintetizador original) y, más adelante,
 `gm:<programa>`.
 
+### Parámetros de instrumentos
+
+- Cada instrumento declara un catálogo de `ParamDef`: el `id` es la ruta dentro de
+  las opciones de Tone (`envelope.attack`, `filter.Q`; en la batería, con la voz
+  adelante: `kick.envelope.decay`), y se aplica con `.set()`. Sumar un parámetro es
+  una línea. La marimba (propia) entiende `brightness`, `sustain` y `release`.
+- `exposed` dice cuáles muestra el panel. Hoy son todos los del catálogo (la lista
+  corta); más adelante se van a poder elegir.
+- La pista guarda en `params` solo lo que difiere del preset. Al cambiar de
+  instrumento, `params` se vacía (los parámetros son de cada instrumento).
+- El secuenciador detecta el cambio de `params` y llama a `Instrument.set()` en vivo,
+  sin recrear el instrumento: se escucha mientras se reproduce.
+- **Panel** a la derecha del piano roll (`InstrumentPanel.tsx`): instrumento,
+  volumen, grupos de parámetros (los modificados en amarillo; doble click vuelve al
+  preset), y «Restablecer preset». Tiempos y frecuencias usan escala logarítmica.
+
+### Efectos (próximo)
+
+Dos buses de efectos con los efectos de Tone.js: A = reverb (`Freeverb`, responde
+al instante; el `Reverb` de convolución necesita esperar `ready` cada vez que
+cambia), B = delay (`FeedbackDelay`). Cada pista manda a cada bus con una ganancia
+propia (envíos A/B en el panel), sin los buses globales con nombre de Tone. El bus
+principal es seco.
+
 ### Pistas
 
 Una canción tiene varias pistas. Una es la **principal**: la del auto, la única que
