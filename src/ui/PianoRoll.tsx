@@ -165,12 +165,18 @@ export function PianoRoll({ song, selectedTrack: track, onSelectTrack, onTracksC
 
   const sequencer = () => {
     if (!seqRef.current) {
-      seqRef.current = new Sequencer(audioDeps(getSynth()));
+      const synth = getSynth();
+      synth.setEffects(latest.current.song.effects);
+      seqRef.current = new Sequencer(audioDeps(synth));
       seqRef.current.setSong(latest.current.song);
     }
     return seqRef.current;
   };
   useEffect(() => seqRef.current?.setSong(song), [song]);
+  // El audio se crea en el primer gesto: hasta entonces no hay buses que configurar.
+  useEffect(() => {
+    if (seqRef.current) getSynth().setEffects(song.effects);
+  }, [song.effects]);
   useEffect(
     () => () => {
       cancelAnimationFrame(rafRef.current);

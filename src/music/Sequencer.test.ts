@@ -35,6 +35,7 @@ function setup() {
           dispose: () => log.push(`${id} dispose`),
         },
         setVolume: () => {},
+        setSends: (s) => log.push(`${id} sends ${s.join(',')}`),
         dispose: () => log.push(`${id} out-dispose`),
       };
     },
@@ -142,5 +143,11 @@ describe('Sequencer', () => {
     seq.setSong(song(track('a', [note(0), note(1)], { params: { 'envelope.attack': 0.5 } })));
     expect(created).toEqual(['marimba']);
     expect(log.filter((l) => l.includes(' set '))).toEqual(['marimba set {"envelope.attack":0.5}']);
+  });
+
+  it('aplica los envíos a los buses de cada pista (seca si no tiene)', () => {
+    const { seq, log } = setup();
+    seq.setSong(song(track('a', [note(0)]), track('b', [note(0)], { instrument: 'synth:pad', sends: [0.5, 0.2] })));
+    expect(log.filter((l) => l.includes(' sends '))).toEqual(['marimba sends 0,0', 'synth:pad sends 0.5,0.2']);
   });
 });

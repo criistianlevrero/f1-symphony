@@ -1,7 +1,7 @@
 import { demoTrack } from './demo';
 import { PIECES } from './pieces';
 import { DEFAULT_THEME } from './themes';
-import type { PieceType, PlacedDecoration, Repeat, Song, SongNote, SongTrack, TrackData } from './types';
+import type { PieceType, PlacedDecoration, Repeat, Song, SongEffects, SongNote, SongTrack, TrackData } from './types';
 
 const INDEX_KEY = 'f1s:tracks';
 const trackKey = (id: string) => `f1s:track:${id}`;
@@ -151,6 +151,23 @@ function validateParams(data: unknown): Record<string, number | string> | undefi
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
+/** Envíos a los buses: dos números entre 0 y 1; si no, la pista va seca. */
+function validateSends(data: unknown): [number, number] | undefined {
+  if (!Array.isArray(data) || data.length !== 2 || !data.every((v) => typeof v === 'number' && Number.isFinite(v))) return undefined;
+  return [Math.min(1, Math.max(0, data[0])), Math.min(1, Math.max(0, data[1]))];
+}
+
+function validateEffects(data: unknown): SongEffects | undefined {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return undefined;
+  const e = data as SongEffects;
+  const out: SongEffects = {};
+  const a = validateParams(e.a);
+  const b = validateParams(e.b);
+  if (a) out.a = a;
+  if (b) out.b = b;
+  return a || b ? out : undefined;
+}
+
 /** Descarta repeticiones mal formadas o que se superponen con una anterior. */
 function validateRepeats(data: unknown): Repeat[] {
   if (!Array.isArray(data)) return [];
@@ -168,7 +185,7 @@ function validateRepeats(data: unknown): Repeat[] {
 function validateSong(data: unknown): Song {
   const defaults = newTrack().song;
   if (!data || typeof data !== 'object') return defaults;
-  const { notes: legacy, tracks: rawTracks, ...rest } = data as Partial<Song> & { notes?: unknown };
+  const { notes: legacy, tracks: rawTracks, effects, ...rest } = data as Partial<Song> & { notes?: unknown };
   let tracks: SongTrack[] = Array.isArray(rawTracks)
     ? rawTracks
         .filter((t: SongTrack) => !!t && typeof t === 'object')
@@ -180,10 +197,11 @@ function validateSong(data: unknown): Song {
           notes: Array.isArray(t.notes) ? t.notes.filter(isNote) : [],
           repeats: validateRepeats(t.repeats),
           params: validateParams(t.params),
+          sends: validateSends(t.sends),
         }))
     : [];
   if (!tracks.length) tracks = [melodyTrack(Array.isArray(legacy) ? legacy.filter(isNote) : [])];
   const main = Math.max(0, tracks.findIndex((t) => t.main === true));
   tracks = tracks.map(({ main: _main, ...t }, i) => (i === main ? { ...t, main: true } : t));
-  return { ...defaults, ...rest, tracks };
+  return { ...defaults, ...rest, tracks, effects: validateEffects(effects) };
 }

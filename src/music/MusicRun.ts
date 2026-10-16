@@ -83,6 +83,8 @@ export class MusicRun {
     const main = mainTrack(song);
     this.lead = deps.create(main.instrument, main.params ?? {});
     this.lead.setVolume(main.volume ?? 1);
+    this.lead.setSends(main.sends ?? [0, 0]);
+    this.synth.setEffects(song.effects);
     this.accompaniment = new Sequencer(deps);
     this.accompaniment.setSong({ ...song, tracks: song.tracks.filter((t) => t !== main) });
     this.director = new TempoDirector(1 / this.spb);

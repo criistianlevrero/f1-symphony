@@ -1,4 +1,5 @@
-import { getInstrument, INSTRUMENTS, resolveParams, type ParamDef, type ParamValue } from '../music/instruments';
+import { BUSES } from '../music/effects';
+import { getInstrument, INSTRUMENTS, resolveParams, type ParamDef, type ParamValue, type ParamValues } from '../music/instruments';
 import type { SongTrack } from '../track/types';
 
 interface Props {
@@ -29,6 +30,48 @@ function format(p: ParamDef, v: number) {
   return `${v.toFixed(digits)}${p.unit ? ` ${p.unit}` : ''}`;
 }
 
+/** Un control de parámetro: deslizador (o lista), con su valor y doble click para el preset. */
+export function ParamControl({ def: p, value: v, modified, onChange }: { def: ParamDef; value: ParamValue; modified: boolean; onChange: (v: ParamValue) => void }) {
+  return (
+    <label className={`field param ${modified ? 'modified' : ''}`}>
+      <span className="param-head">
+        {p.label}
+        {!p.options && <span className="param-value">{format(p, v as number)}</span>}
+      </span>
+      {p.options ? (
+        <select value={v as string} onChange={(e) => onChange(e.target.value)}>
+          {p.options.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <input
+          type="range"
+          min={0}
+          max={SLIDER_STEPS}
+          step={1}
+          value={toSlider(p, v as number)}
+          onChange={(e) => onChange(fromSlider(p, +e.target.value))}
+          onDoubleClick={() => onChange(p.default)}
+          title="Doble click: valor del preset"
+        />
+      )}
+    </label>
+  );
+}
+
+/** Devuelve los valores cambiados con `p` en `v`, guardando solo lo que difiere del preset. */
+export function withParam(values: ParamValues | undefined, p: ParamDef, v: ParamValue): ParamValues | undefined {
+  const out = { ...values };
+  if (v === p.default) delete out[p.id];
+  else out[p.id] = v;
+  return Object.keys(out).length ? out : undefined;
+}
+
+const SEND_DEFS: ParamDef[] = BUSES.map((b) => ({ id: b.id, label: b.sendLabel, group: 'Efectos', default: 0, min: 0, max: 1, step: 0.01 }));
+
 /** Columna a la derecha del piano roll: instrumento de la pista, volumen y parámetros. */
 export function InstrumentPanel({ track, onChange }: Props) {
   const info = getInstrument(track.instrument);
@@ -38,12 +81,12 @@ export function InstrumentPanel({ track, onChange }: Props) {
   const groups = [...new Set(exposed.map((p) => p.group))];
   const changed = Object.keys(track.params ?? {}).length > 0;
 
-  /** Guarda solo lo que difiere del preset. */
-  const setParam = (p: ParamDef, v: ParamValue) => {
-    const params = { ...track.params };
-    if (v === p.default) delete params[p.id];
-    else params[p.id] = v;
-    onChange({ ...track, params: Object.keys(params).length ? params : undefined });
+  const setParam = (p: ParamDef, v: ParamValue) => onChange({ ...track, params: withParam(track.params, p, v) });
+  const sends = track.sends ?? [0, 0];
+  const setSend = (i: number, v: number) => {
+    const next: [number, number] = [sends[0], sends[1]];
+    next[i] = v;
+    onChange({ ...track, sends: next[0] || next[1] ? next : undefined });
   };
 
   return (
@@ -75,40 +118,18 @@ export function InstrumentPanel({ track, onChange }: Props) {
           <legend>{group}</legend>
           {exposed
             .filter((p) => p.group === group)
-            .map((p) => {
-              const v = values[p.id];
-              const modified = track.params?.[p.id] !== undefined;
-              return (
-                <label key={p.id} className={`field param ${modified ? 'modified' : ''}`}>
-                  <span className="param-head">
-                    {p.label}
-                    {!p.options && <span className="param-value">{format(p, v as number)}</span>}
-                  </span>
-                  {p.options ? (
-                    <select value={v as string} onChange={(e) => setParam(p, e.target.value)}>
-                      {p.options.map((o) => (
-                        <option key={o.value} value={o.value}>
-                          {o.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="range"
-                      min={0}
-                      max={SLIDER_STEPS}
-                      step={1}
-                      value={toSlider(p, v as number)}
-                      onChange={(e) => setParam(p, fromSlider(p, +e.target.value))}
-                      onDoubleClick={() => setParam(p, p.default)}
-                      title="Doble click: valor del preset"
-                    />
-                  )}
-                </label>
-              );
-            })}
+            .map((p) => (
+              <ParamControl key={p.id} def={p} value={values[p.id]} modified={track.params?.[p.id] !== undefined} onChange={(v) => setParam(p, v)} />
+            ))}
         </fieldset>
       ))}
+
+      <fieldset className="param-group">
+        <legend>Efectos</legend>
+        {SEND_DEFS.map((p, i) => (
+          <ParamControl key={p.id} def={p} value={sends[i]} modified={sends[i] > 0} onChange={(v) => setSend(i, v as number)} />
+        ))}
+      </fieldset>
 
       <button className="btn ghost" disabled={!changed} onClick={() => onChange({ ...track, params: undefined })}>
         Restablecer preset

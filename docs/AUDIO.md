@@ -90,13 +90,22 @@ Un catálogo asocia ids a fábricas: `synth:lead`, `synth:bass`, `synth:pad`,
   volumen, grupos de parámetros (los modificados en amarillo; doble click vuelve al
   preset), y «Restablecer preset». Tiempos y frecuencias usan escala logarítmica.
 
-### Efectos (próximo)
+### Efectos
 
-Dos buses de efectos con los efectos de Tone.js: A = reverb (`Freeverb`, responde
-al instante; el `Reverb` de convolución necesita esperar `ready` cada vez que
-cambia), B = delay (`FeedbackDelay`). Cada pista manda a cada bus con una ganancia
-propia (envíos A/B en el panel), sin los buses globales con nombre de Tone. El bus
-principal es seco.
+- Dos buses (`effects.ts`, definidos en `BUSES`) con efectos de Tone.js:
+  **A = Reverb** (`Freeverb`: tamaño de sala, amortiguación) y **B = Delay**
+  (`FeedbackDelay`: tiempo en segundos, realimentación). Ambos con nivel de retorno.
+  `Freeverb` responde al instante; el `Reverb` de convolución necesitaría esperar
+  `ready` cada vez que cambia.
+- El efecto procesa solo lo enviado (wet = 1) y vuelve al bus principal, que es
+  seco. Los buses son únicos en el `Synth` y se configuran con la canción abierta
+  (`synth.setEffects`), en el editor y en el juego.
+- **Por pista:** `sends: [a, b]` (de 0 a 1, después del volumen), en la sección
+  «Efectos» del panel de instrumento. Sin `sends`, la pista va seca.
+- **Por canción:** `effects: { a?, b? }`, solo lo que difiere del preset, en la
+  sección «Efectos de la canción» del panel lateral (pestaña Música).
+- Pendiente: sincronizar el tiempo del delay con el beat (en el juego el tempo
+  cambia con el auto) y elegir qué efecto va en cada bus.
 
 ### Pistas
 

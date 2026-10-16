@@ -591,6 +591,19 @@ kbd {
 .param.modified .param-head {
   color: #ffcc33;
 }
+.instrument-panel .field,
+.song-effects .field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+}
+.song-effects input[type='range'] {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+}
 .pianoroll-canvas canvas {
   position: absolute;
   inset: 0;

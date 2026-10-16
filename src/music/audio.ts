@@ -1,6 +1,8 @@
 // Import directo del módulo: el índice de Tone crea el AudioContext al importarse,
 // fuera de un gesto del usuario (ver docs/AUDIO.md, «Riesgos conocidos»).
 import { getContext } from 'tone/build/esm/core/Global.js';
+import type { SongEffects } from '../track/types';
+import { EffectBuses } from './effects';
 import { midiToFreq } from './theory';
 
 /**
@@ -18,6 +20,8 @@ export class Synth {
   readonly ctx: AudioContext;
   /** Entrada del bus principal (seco, con compresor). Los efectos irán en buses aparte. */
   readonly master: GainNode;
+  /** Buses de efectos A (reverb) y B (delay), que vuelven a `master`. */
+  readonly buses: EffectBuses;
   private clickGain: GainNode;
 
   constructor() {
@@ -31,6 +35,7 @@ export class Synth {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.8;
     this.master.connect(comp);
+    this.buses = new EffectBuses(this.ctx, this.master);
 
     this.clickGain = this.ctx.createGain();
     this.clickGain.gain.value = 0.35;
@@ -39,6 +44,11 @@ export class Synth {
 
   resume() {
     if (this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
+  /** Configura los buses con los efectos de la canción abierta. */
+  setEffects(effects: SongEffects | undefined) {
+    this.buses.set(effects);
   }
 
   get now() {

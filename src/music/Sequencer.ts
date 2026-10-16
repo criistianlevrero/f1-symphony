@@ -29,6 +29,8 @@ export function fixedClock(bpm: number, startTime: number, startBeat: number): B
 export interface TrackOutput {
   instrument: Instrument;
   setVolume(volume: number): void;
+  /** Envíos a los buses de efectos A y B (0 = seco). */
+  setSends(sends: [number, number]): void;
   dispose(): void;
 }
 
@@ -37,7 +39,10 @@ export interface SequencerDeps {
   create(instrumentId: string, params: ParamValues): TrackOutput;
 }
 
-/** Conecta cada pista al bus principal de `synth` con su propio volumen. */
+/**
+ * Conecta cada pista al bus principal de `synth` con su propio volumen, y manda una
+ * parte (después del volumen) a cada bus de efectos.
+ */
 export function audioDeps(synth: Synth): SequencerDeps {
   return {
     now: () => synth.now,
@@ -46,12 +51,21 @@ export function audioDeps(synth: Synth): SequencerDeps {
       const gain = synth.ctx.createGain();
       instrument.output.connect(gain);
       gain.connect(synth.master);
+      const sends = synth.buses.inputs.map((input) => {
+        const send = synth.ctx.createGain();
+        send.gain.value = 0;
+        gain.connect(send);
+        send.connect(input);
+        return send;
+      });
       return {
         instrument,
         setVolume: (v) => gain.gain.setTargetAtTime(v, synth.now, 0.02),
+        setSends: (s) => sends.forEach((send, i) => send.gain.setTargetAtTime(s[i] ?? 0, synth.now, 0.02)),
         dispose() {
           instrument.dispose();
           gain.disconnect();
+          for (const send of sends) send.disconnect();
         },
       };
     },
@@ -128,6 +142,7 @@ export class Sequencer {
         v.out.instrument.set(track.params ?? {});
       }
       v.out.setVolume(track.volume ?? 1);
+      v.out.setSends(track.sends ?? [0, 0]);
       v.events = unroll(track).map((n) => ({ beat: n.beat, end: n.beat + n.duration, pitch: n.pitch }));
       v.next = v.events.findIndex((e) => e.beat >= this.horizon);
       if (v.next < 0) v.next = v.events.length;

@@ -95,5 +95,15 @@ describe('validateTrack: pistas de la canción', () => {
     const sin = validateTrack(song({ tracks: [{ id: 'b', name: 'B', instrument: 'marimba', notes: [], repeats: [] }] }));
     expect(sin.song.tracks[0].params).toBeUndefined();
   });
+
+  it('valida envíos y efectos de la canción', () => {
+    const tr = (sends: unknown) => ({ id: 'a', name: 'A', instrument: 'marimba', notes: [], repeats: [], sends });
+    expect(validateTrack(song({ tracks: [tr([0.3, 2])] })).song.tracks[0].sends).toEqual([0.3, 1]);
+    expect(validateTrack(song({ tracks: [tr([0.3])] })).song.tracks[0].sends).toBeUndefined();
+    expect(validateTrack(song({ tracks: [tr('x')] })).song.tracks[0].sends).toBeUndefined();
+    const t = validateTrack(song({ notes: [], effects: { a: { roomSize: 0.9, raro: {} }, b: 'nada', c: { x: 1 } } }));
+    expect(t.song.effects).toEqual({ a: { roomSize: 0.9 } });
+    expect(validateTrack(song({ notes: [] })).song.effects).toBeUndefined();
+  });
 });
 

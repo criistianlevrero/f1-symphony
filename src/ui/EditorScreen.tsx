@@ -5,6 +5,9 @@ import { exportTrackFile, saveTrack } from '../track/storage';
 import { isThemeId, THEME_ORDER, THEMES } from '../track/themes';
 import type { PieceType, Song, TrackData } from '../track/types';
 import { availableBeats, mainTrack, songLengthBeats, unroll } from '../music/song';
+import { BUSES } from '../music/effects';
+import { resolveParams } from '../music/instruments';
+import { ParamControl, withParam } from './InstrumentPanel';
 import { PianoRoll } from './PianoRoll';
 import { PieceIcon } from './PieceIcon';
 
@@ -217,6 +220,28 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
                 <option value={4}>Redonda</option>
               </select>
             </label>
+            <h3>Efectos de la canción</h3>
+            {BUSES.map((bus) => {
+              const values = resolveParams(bus.params, song.effects?.[bus.id]);
+              return (
+                <fieldset key={bus.id} className="param-group song-effects">
+                  <legend>{bus.name}</legend>
+                  {bus.params.map((p) => (
+                    <ParamControl
+                      key={p.id}
+                      def={p}
+                      value={values[p.id]}
+                      modified={song.effects?.[bus.id]?.[p.id] !== undefined}
+                      onChange={(v) => {
+                        const effects = { ...song.effects, [bus.id]: withParam(song.effects?.[bus.id], p, v) };
+                        if (!effects[bus.id]) delete effects[bus.id];
+                        setSong({ effects: Object.keys(effects).length ? effects : undefined });
+                      }}
+                    />
+                  ))}
+                </fieldset>
+              );
+            })}
             <div className="info">
               En la pista entran <b>{Math.floor(beatsFit)}</b> beats ({(beatsFit / song.beatsPerBar).toFixed(1)} compases). La canción dura{' '}
               <b>{songBeats}</b> beats.

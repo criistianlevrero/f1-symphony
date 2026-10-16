@@ -53,6 +53,14 @@ export interface SongTrack {
    * valor). Se guardan tal cual aunque esta versión no los conozca.
    */
   params?: Record<string, number | string>;
+  /** Cuánto manda la pista a los buses de efectos A (reverb) y B (delay), de 0 a 1. */
+  sends?: [number, number];
+}
+
+/** Ajustes de los buses de efectos de la canción: solo lo que difiere del preset. */
+export interface SongEffects {
+  a?: Record<string, number | string>;
+  b?: Record<string, number | string>;
 }
 
 export interface Song {
@@ -61,6 +69,7 @@ export interface Song {
   designSpeed: number; // m/s
   startOffset: number; // metros desde la largada hasta el beat 0
   tracks: SongTrack[];
+  effects?: SongEffects;
 }
 
 /** Elemento decorativo en la grilla. Solo visual: nunca tiene física. */
