@@ -16,7 +16,7 @@ export class Synth {
    * instrumentos para que nodos nativos y de Tone se puedan conectar.
    */
   readonly ctx: AudioContext;
-  /** Entrada del bus principal (con eco y compresor). */
+  /** Entrada del bus principal (seco, con compresor). Los efectos irán en buses aparte. */
   readonly master: GainNode;
   private clickGain: GainNode;
 
@@ -31,19 +31,6 @@ export class Synth {
     this.master = this.ctx.createGain();
     this.master.gain.value = 0.8;
     this.master.connect(comp);
-
-    // Eco corto para dar un poco de espacio.
-    const delay = this.ctx.createDelay(1);
-    delay.delayTime.value = 0.18;
-    const feedback = this.ctx.createGain();
-    feedback.gain.value = 0.22;
-    const wet = this.ctx.createGain();
-    wet.gain.value = 0.25;
-    this.master.connect(delay);
-    delay.connect(feedback);
-    feedback.connect(delay);
-    delay.connect(wet);
-    wet.connect(comp);
 
     this.clickGain = this.ctx.createGain();
     this.clickGain.gain.value = 0.35;
