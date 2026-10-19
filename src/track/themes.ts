@@ -14,6 +14,14 @@ export interface RoadPalette {
   pillar: number;
 }
 
+/** Modelo decorativo que se puede ubicar en la grilla. Solo visual: nunca tiene física. */
+export interface DecorAsset {
+  id: string;
+  label: string;
+  /** Ruta del .glb relativa a `public/`. El origen del modelo es su base. */
+  url: string;
+}
+
 export interface Theme {
   id: ThemeId;
   label: string;
@@ -30,6 +38,8 @@ export interface Theme {
   curbPulse: number;
   /** Resplandor alrededor de lo que brilla. Sin bloom se dibuja directo, sin posprocesado. */
   bloom?: { strength: number; radius: number; threshold: number };
+  /** Decoración disponible para esta estética, en el orden de la paleta del editor. */
+  decor: DecorAsset[];
 }
 
 export const THEMES: Record<ThemeId, Theme> = {
@@ -45,6 +55,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     road: { road: 0x2c3038, curbA: 0xe03a3a, curbB: 0xf2f2f2, side: 0x6c7689, bottom: 0x4a5163, pillar: 0x20242c },
     curbGlow: 0,
     curbPulse: 0,
+    decor: [{ id: 'palmera', label: 'Palmera', url: 'models/palmera.glb' }],
   },
   abyss: {
     id: 'abyss',
@@ -59,6 +70,7 @@ export const THEMES: Record<ThemeId, Theme> = {
     curbGlow: 1.2,
     curbPulse: 0.7,
     bloom: { strength: 0.3, radius: 0.2, threshold: 0.15 },
+    decor: [],
   },
 };
 

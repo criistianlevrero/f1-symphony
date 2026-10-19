@@ -2,11 +2,12 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { createEnvironment, type Environment } from '../game/environment';
 import { createRenderPipeline, type RenderPipeline } from '../game/renderPipeline';
+import { buildDecorations, loadDecorModels, placeDecor, type DecorModels } from '../track/decor';
 import { buildGate, buildPieceGeometry, makeRoadMaterial, setRoadBeat } from '../track/geometry';
 import { chainPieces, exitConnector, headingDir, pieceFrames } from '../track/layout';
 import { CELL, LEVEL } from '../track/pieces';
 import { getTheme, type Theme } from '../track/themes';
-import type { Heading, PieceType, PlacedPiece, Song } from '../track/types';
+import type { Heading, PieceType, PlacedDecoration, PlacedPiece, Song, TrackData } from '../track/types';
 import { TrackPath } from '../track/TrackPath';
 import { MarkerView } from '../music/MarkerView';
 import { computeMarkers, secondsPerBeat } from '../music/song';
@@ -19,8 +20,18 @@ export interface EditorCursor {
   rot: Heading;
 }
 
+/** Qué coloca el click: tramos o decoración de la estética actual. */
+export type EditorMode = 'track' | 'decor';
+
+type Decorations = TrackData['decorations'];
+
+interface Snapshot {
+  pieces: PlacedPiece[];
+  decorations: Decorations;
+}
+
 export interface EditorEvents {
-  onChange?: (pieces: PlacedPiece[]) => void;
+  onChange?: (pieces: PlacedPiece[], decorations: Decorations) => void;
   onCursor?: (cursor: EditorCursor) => void;
   /** Largo del recorrido (m) cada vez que cambia la pista. */
   onPathLength?: (length: number) => void;
@@ -49,8 +60,11 @@ export class Editor {
   private plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   private pieces: PlacedPiece[];
-  private undoStack: PlacedPiece[][] = [];
-  private redoStack: PlacedPiece[][] = [];
+  private decorations: Decorations;
+  private undoStack: Snapshot[] = [];
+  private redoStack: Snapshot[] = [];
+  private mode: EditorMode = 'track';
+  private decorAsset: string | null = null;
   private cursor: EditorCursor = { cell: [0, 0, 0], rot: 0 };
   private type: PieceType = 'straight';
   private hovered = -1;
@@ -59,6 +73,10 @@ export class Editor {
   private markerView: MarkerView | null = null;
 
   private trackGroup = new THREE.Group();
+  /** Decoración de la estética actual. Comparte geometría con el caché de modelos: no se libera. */
+  private decorGroup = new THREE.Group();
+  private decorModels: DecorModels = new Map();
+  private decorLoad = 0;
   private pieceMeshes: THREE.Mesh[] = [];
   private ghost = new THREE.Group();
   private cursorMarker: THREE.Mesh;
@@ -67,6 +85,7 @@ export class Editor {
   readonly overlay = new THREE.Group();
   private _inputEnabled = true;
 
+  private themeId!: string;
   private theme!: Theme;
   private env: Environment | null = null;
   private roadMat!: THREE.MeshStandardMaterial;
@@ -82,19 +101,19 @@ export class Editor {
 
   constructor(
     private container: HTMLElement,
-    pieces: PlacedPiece[],
-    theme: string,
+    track: Pick<TrackData, 'pieces' | 'theme' | 'decorations'>,
     private events: EditorEvents = {},
   ) {
-    this.pieces = structuredClone(pieces);
+    this.pieces = structuredClone(track.pieces);
+    this.decorations = structuredClone(track.decorations);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
     this.renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    this.applyTheme(theme);
-    this.scene.add(this.trackGroup, this.ghost, this.overlay);
+    this.applyTheme(track.theme);
+    this.scene.add(this.trackGroup, this.decorGroup, this.ghost, this.overlay);
 
     this.cursorMarker = new THREE.Mesh(
       new THREE.CylinderGeometry(1.2, 1.2, 0.3, 20),
@@ -139,6 +158,10 @@ export class Editor {
     return structuredClone(this.pieces);
   }
 
+  getDecorations() {
+    return structuredClone(this.decorations);
+  }
+
   /** Si es false, el editor no coloca ni borra tramos (la cámara sigue andando). */
   get inputEnabled() {
     return this._inputEnabled;
@@ -159,9 +182,22 @@ export class Editor {
 
   /** Cambia la estética con la que se dibuja la pista. */
   setTheme(id: string) {
-    if (getTheme(id) === this.theme) return;
+    if (id === this.themeId) return;
     this.applyTheme(id);
     this.rebuild();
+    this.rebuildDecor();
+  }
+
+  setMode(mode: EditorMode) {
+    this.mode = mode;
+    if (mode === 'decor') this.setHovered(-1);
+    this.updateGhost();
+  }
+
+  /** Asset de decoración que coloca el click (id dentro de la estética actual). */
+  setDecorAsset(id: string | null) {
+    this.decorAsset = id;
+    this.updateGhost();
   }
 
   setPieceType(type: PieceType) {
@@ -180,6 +216,7 @@ export class Editor {
   }
 
   place() {
+    if (this.mode === 'decor') return this.placeDecoration();
     this.commit(() => {
       const piece: PlacedPiece = { type: this.type, cell: [...this.cursor.cell], rot: this.cursor.rot };
       this.pieces = this.pieces.filter(
@@ -192,6 +229,7 @@ export class Editor {
 
   /** Borra el tramo bajo el mouse o, si no hay, el que arranca en el cursor. */
   remove() {
+    if (this.mode === 'decor') return this.removeDecoration();
     const index = this.hovered >= 0 ? this.hovered : this.pieces.findIndex((p) => sameCell(p.cell, this.cursor.cell));
     if (index < 0) return;
     this.commit(() => {
@@ -207,20 +245,26 @@ export class Editor {
     });
   }
 
+  /** Borra toda la decoración de la estética actual (la de las otras se conserva). */
+  clearDecorations() {
+    if (!this.decorList.length) return;
+    this.commit(() => {
+      this.decorations = { ...this.decorations, [this.themeId]: [] };
+    });
+  }
+
   undo() {
     const prev = this.undoStack.pop();
     if (!prev) return;
-    this.redoStack.push(this.pieces);
-    this.pieces = prev;
-    this.afterChange();
+    this.redoStack.push(this.snapshot());
+    this.restore(prev);
   }
 
   redo() {
     const next = this.redoStack.pop();
     if (!next) return;
-    this.undoStack.push(this.pieces);
-    this.pieces = next;
-    this.afterChange();
+    this.undoStack.push(this.snapshot());
+    this.restore(next);
   }
 
   /** Encuadra toda la pista. */
@@ -237,6 +281,7 @@ export class Editor {
 
   dispose() {
     this.disposed = true;
+    this.decorLoad++;
     cancelAnimationFrame(this.raf);
     this.resizeObserver.disconnect();
     window.removeEventListener('keydown', this.onKeyDown);
@@ -253,8 +298,40 @@ export class Editor {
 
   // ---------- Estado ----------
 
+  private get decorList(): PlacedDecoration[] {
+    return this.decorations[this.themeId] ?? [];
+  }
+
+  private snapshot(): Snapshot {
+    return { pieces: structuredClone(this.pieces), decorations: structuredClone(this.decorations) };
+  }
+
+  private restore(s: Snapshot) {
+    this.pieces = s.pieces;
+    this.decorations = s.decorations;
+    this.afterChange();
+  }
+
+  private placeDecoration() {
+    const asset = this.decorAsset;
+    if (!asset || !this.decorModels.has(asset)) return;
+    this.commit(() => {
+      const d: PlacedDecoration = { asset, cell: [...this.cursor.cell], rot: this.cursor.rot };
+      // Una decoración por celda: colocar en una ocupada la reemplaza.
+      const others = this.decorList.filter((o) => !sameCell(o.cell, d.cell));
+      this.decorations = { ...this.decorations, [this.themeId]: [...others, d] };
+    });
+  }
+
+  private removeDecoration() {
+    if (!this.decorList.some((d) => sameCell(d.cell, this.cursor.cell))) return;
+    this.commit(() => {
+      this.decorations = { ...this.decorations, [this.themeId]: this.decorList.filter((d) => !sameCell(d.cell, this.cursor.cell)) };
+    });
+  }
+
   private commit(mutate: () => void) {
-    this.undoStack.push(structuredClone(this.pieces));
+    this.undoStack.push(this.snapshot());
     if (this.undoStack.length > MAX_HISTORY) this.undoStack.shift();
     this.redoStack = [];
     mutate();
@@ -263,7 +340,8 @@ export class Editor {
 
   private afterChange() {
     this.rebuild();
-    this.events.onChange?.(this.getPieces());
+    this.rebuildDecor();
+    this.events.onChange?.(this.getPieces(), this.getDecorations());
   }
 
   private moveCursorAfter(piece: PlacedPiece) {
@@ -292,7 +370,9 @@ export class Editor {
 
   /** Ambiente, grilla y materiales de la calzada según la estética. No rearma los tramos. */
   private applyTheme(id: string) {
+    this.themeId = id;
     this.theme = getTheme(id);
+    this.loadDecor();
     this.env?.dispose();
     this.env = createEnvironment(this.scene, this.theme);
     this.env.sun.castShadow = false;
@@ -314,6 +394,24 @@ export class Editor {
 
     this.pipeline?.dispose();
     this.pipeline = createRenderPipeline(this.renderer, this.scene, this.camera, this.theme);
+  }
+
+  /** Carga los modelos de decoración de la estética; si mientras tanto cambia, se descarta. */
+  private loadDecor() {
+    const token = ++this.decorLoad;
+    this.decorModels = new Map();
+    void loadDecorModels(this.theme).then((models) => {
+      if (token !== this.decorLoad) return;
+      this.decorModels = models;
+      this.rebuildDecor();
+      this.updateGhost();
+    });
+  }
+
+  private rebuildDecor() {
+    this.scene.remove(this.decorGroup);
+    this.decorGroup = buildDecorations(this.decorList, this.decorModels);
+    this.scene.add(this.decorGroup);
   }
 
   private disposeTrackMeshes() {
@@ -359,14 +457,26 @@ export class Editor {
 
   private updateGhost() {
     for (const child of [...this.ghost.children]) {
-      (child as THREE.Mesh).geometry.dispose();
+      if (child.userData.ownsGeometry) (child as THREE.Mesh).geometry.dispose();
       this.ghost.remove(child);
+    }
+    if (this.mode === 'decor') {
+      const model = this.decorAsset ? this.decorModels.get(this.decorAsset) : undefined;
+      if (!model) return;
+      const replacing = this.decorList.some((d) => sameCell(d.cell, this.cursor.cell));
+      const obj = placeDecor(model, this.cursor);
+      obj.traverse((o) => {
+        if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).material = replacing ? this.ghostReplaceMat : this.ghostMat;
+      });
+      this.ghost.add(obj);
+      return;
     }
     const piece: PlacedPiece = { type: this.type, cell: this.cursor.cell, rot: this.cursor.rot };
     const replacing = this.pieces.some((p) => sameCell(p.cell, piece.cell));
     const geo = buildPieceGeometry(piece, this.theme.road);
     geo.deleteAttribute('color');
     const mesh = new THREE.Mesh(geo, replacing ? this.ghostReplaceMat : this.ghostMat);
+    mesh.userData.ownsGeometry = true;
     mesh.position.y = 0.05;
     this.ghost.add(mesh);
   }
@@ -391,7 +501,7 @@ export class Editor {
   private onPointerMove = (e: PointerEvent) => {
     if (e.buttons & 6 || !this.inputEnabled) return; // rotando o paneando la cámara
     this.updatePointer(e);
-    const hit = this.raycaster.intersectObjects(this.pieceMeshes, false)[0];
+    const hit = this.mode === 'track' ? this.raycaster.intersectObjects(this.pieceMeshes, false)[0] : undefined;
     this.setHovered(hit ? (hit.object.userData.index as number) : -1);
 
     const p = this.raycaster.ray.intersectPlane(this.plane, new THREE.Vector3());

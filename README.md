@@ -36,7 +36,12 @@ El botón derecho rota la cámara (con Shift la desplaza).
 Pestaña **Música**: tempo, compás, velocidad de diseño y piano roll. Los
 marcadores se ubican solos sobre la pista según la melodía.
 
+Pestaña **Decoración**: estética de la pista y sus assets decorativos (p. ej. palmeras
+en Día). Se colocan en la grilla igual que los tramos; son solo visuales, sin física,
+y se pueden poner sobre la pista.
+
 ## Documentación
 
 - [Diseño](docs/DESIGN.md)
 - [Exportar el modelo del auto](docs/CAR_MODEL.md)
+- [Assets de decoración](docs/DECOR_ASSETS.md)

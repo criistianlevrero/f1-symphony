@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Editor, type EditorCursor } from '../editor/Editor';
 import { PIECE_ORDER, PIECES } from '../track/pieces';
 import { exportTrackFile, saveTrack } from '../track/storage';
-import { isThemeId, THEME_ORDER, THEMES } from '../track/themes';
+import { getTheme, isThemeId, THEME_ORDER, THEMES } from '../track/themes';
 import type { PieceType, Song, TrackData } from '../track/types';
 import { availableBeats, mainTrack, songLengthBeats, unroll } from '../music/song';
 import { BUSES } from '../music/effects';
@@ -56,10 +56,13 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
   const [pathLength, setPathLength] = useState(0);
   const [noteLength, setNoteLength] = useState(1);
   const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const decorAssets = getTheme(track.theme).decor;
+  const [decorAsset, setDecorAsset] = useState<string | null>(decorAssets[0]?.id ?? null);
+  const decorCount = track.decorations[track.theme]?.length ?? 0;
 
   useEffect(() => {
-    const editor = new Editor(containerRef.current!, trackRef.current.pieces, trackRef.current.theme, {
-      onChange: (pieces) => onChange({ ...trackRef.current, pieces }, true),
+    const editor = new Editor(containerRef.current!, trackRef.current, {
+      onChange: (pieces, decorations) => onChange({ ...trackRef.current, pieces, decorations }, true),
       onCursor: setCursor,
       onPathLength: setPathLength,
     });
@@ -75,9 +78,17 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
 
   useEffect(() => editorRef.current?.setPieceType(type), [type]);
   useEffect(() => editorRef.current?.setSong(track.song), [track.song]);
-  useEffect(() => editorRef.current?.setTheme(track.theme), [track.theme]);
   useEffect(() => {
-    if (editorRef.current) editorRef.current.inputEnabled = tab === 'track';
+    editorRef.current?.setTheme(track.theme);
+    // Cada estética tiene su propia paleta: elegir su primer asset.
+    setDecorAsset(getTheme(track.theme).decor[0]?.id ?? null);
+  }, [track.theme]);
+  useEffect(() => editorRef.current?.setDecorAsset(decorAsset), [decorAsset]);
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.inputEnabled = tab !== 'music';
+    editor.setMode(tab === 'decor' ? 'decor' : 'track');
   }, [tab]);
 
   const setSong = (patch: Partial<Song>) => onChange({ ...track, song: { ...track.song, ...patch } }, true);
@@ -158,6 +169,34 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
               </select>
               <small>Cada estética guarda su propia decoración: al cambiar de estética, la de las otras se conserva.</small>
             </label>
+            <h3>Decoración ({decorCount})</h3>
+            {decorAssets.length ? (
+              <div className="palette">
+                {decorAssets.map((a) => (
+                  <button key={a.id} className={`piece ${a.id === decorAsset ? 'selected' : ''}`} onClick={() => setDecorAsset(a.id)} title={a.label}>
+                    <span>{a.label}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="info">Esta estética todavía no tiene decoración.</div>
+            )}
+            <small>Solo visual: no choca con el auto y se puede poner sobre la pista.</small>
+            <div className="panel-row">
+              <button className="btn ghost" onClick={() => editorRef.current?.undo()}>
+                Deshacer
+              </button>
+              <button className="btn ghost" onClick={() => editorRef.current?.redo()}>
+                Rehacer
+              </button>
+              <button
+                className="btn ghost"
+                disabled={!decorCount}
+                onClick={() => confirm('¿Borrar la decoración de esta estética?') && editorRef.current?.clearDecorations()}
+              >
+                Vaciar
+              </button>
+            </div>
           </>
         ) : tab === 'track' ? (
           <>
@@ -267,9 +306,9 @@ export function EditorScreen({ track, dirty, onChange, onPlay, onExit }: Props) 
         )}
         <dl className="keys">
           <dt>Click</dt>
-          <dd>colocar tramo</dd>
+          <dd>colocar {tab === 'decor' ? 'decoración' : 'tramo'}</dd>
           <dt>Shift+click / X</dt>
-          <dd>borrar tramo</dd>
+          <dd>borrar {tab === 'decor' ? 'decoración' : 'tramo'}</dd>
           <dt>Q / E</dt>
           <dd>rotar</dd>
           <dt>R / F</dt>

@@ -9,6 +9,7 @@ import { Keyboard } from './input';
 import { addGround, addTrackColliders } from './trackPhysics';
 import { carTuning } from './tuning';
 import { buildTrack, type BuiltTrack } from '../track/build';
+import { buildDecorations, loadDecorModels, type DecorModels } from '../track/decor';
 import { setRoadBeat } from '../track/geometry';
 import { getTheme } from '../track/themes';
 import type { Song, TrackData } from '../track/types';
@@ -104,9 +105,13 @@ export class Game {
   }
 
   static async create(container: HTMLElement, track: TrackData) {
-    const [, carModel] = await Promise.all([initRapier(), loadCarModel(CAR_MODEL_URL)]);
+    const [, carModel, decorModels] = await Promise.all([
+      initRapier(),
+      loadCarModel(CAR_MODEL_URL),
+      loadDecorModels(getTheme(track.theme)),
+    ]);
     const game = new Game(container);
-    game.setupScene(carModel, track);
+    game.setupScene(carModel, decorModels, track);
     return game;
   }
 
@@ -118,7 +123,7 @@ export class Game {
     return this.track.path;
   }
 
-  private setupScene(carModel: CarModel, trackData: TrackData) {
+  private setupScene(carModel: CarModel, decorModels: DecorModels, trackData: TrackData) {
     const theme = getTheme(trackData.theme);
     this.sun = createEnvironment(this.scene, theme).sun;
     this.sunOffset.set(...theme.sun.position);
@@ -133,6 +138,8 @@ export class Game {
     this.track = buildTrack(trackData);
     this.scene.add(this.track.group);
     addTrackColliders(RAPIER, this.world, this.track.geometries);
+    // Decoración: solo visual, sin colliders.
+    this.scene.add(buildDecorations(trackData.decorations[trackData.theme] ?? [], decorModels));
     this.telemetry.trackLength = this.track.path?.length ?? 0;
 
     if (mainTrack(trackData.song).notes.length > 0 && this.track.path) {

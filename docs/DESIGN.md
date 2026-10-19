@@ -104,6 +104,10 @@ en los cordones y se suma a la emisión.
 - **La decoración se guarda por estética** (`decorations: { [theme]: [...] }`), ubicada
   en la grilla. Solo se dibuja la de la estética activa; cambiar de estética no borra
   la de las otras.
+- **Assets de decoración:** cada estética lista los suyos en `decor` (`themes.ts`); los
+  `.glb` se cargan una vez y se clonan por instancia (`src/track/decor.ts`). Una
+  decoración por celda: colocar en una ocupada la reemplaza. Puede superponerse con la
+  pista, ya que no tiene física. Cómo crear y sumar assets: [DECOR_ASSETS.md](DECOR_ASSETS.md).
 - Una estética o un asset que esta versión no conoce se **conserva** al cargar y guardar;
   la estética desconocida se dibuja como Día.
 - A futuro, los tramos cargados desde `.glb` (con física) van a necesitar separar la
